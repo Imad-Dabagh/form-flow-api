@@ -1,0 +1,9 @@
+export const PLATFORM_ROLES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+};
+
+export const ORGANIZATION_ROLES = {
+  ADMIN: "ADMIN",
+  MANAGER: "MANAGER",
+  USER: "USER",
+};
