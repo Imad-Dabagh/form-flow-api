@@ -3,6 +3,8 @@ import express from "express";
 import type { Express } from "express";
 import { attachJwt, handleErrors, requestContext } from "../../middlewares";
 import { notFound } from "../../utils/errors";
+import authRoutes from "../../routes/auth";
+import meRoutes from "../../routes/me";
 
 function getCorsOrigins(): string[] | true {
   const configuredOrigins = process.env.CORS_ORIGINS;
@@ -34,7 +36,8 @@ export default function expressLoader(app: Express): void {
     });
   });
 
-  // Route groups are registered here before the fallback middleware.
+  app.use("/auth", authRoutes);
+  app.use("/me", meRoutes);
 
   app.use((_req, _res, next) => next(notFound("Endpoint")));
   app.use(handleErrors);
