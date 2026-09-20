@@ -1,8 +1,7 @@
 {
-  "name": "form-builder-v1-backend",
+  "name": "form-flow-api",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec tsx src/index.ts",
     "build": "tsc",
