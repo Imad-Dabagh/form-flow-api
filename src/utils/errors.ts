@@ -28,6 +28,12 @@ export const unauthenticated = () =>
     code: "UNAUTHENTICATED",
   });
 
+export const invalidCredentials = () =>
+  new AppError("Invalid email or password.", {
+    statusCode: 401,
+    code: "INVALID_CREDENTIALS",
+  });
+
 export const unauthorized = () =>
   new AppError("You are not authorized to perform this action.", {
     statusCode: 403,
