@@ -1,0 +1,37 @@
+// {
+//   "compilerOptions": {
+//     "target": "es2020",
+//     "module": "nodenext",
+//     "moduleResolution": "nodenext",
+
+//     "rootDir": "./src",
+//     "outDir": "./dist",
+
+//     "strict": true,
+//     "esModuleInterop": true,
+//     "skipLibCheck": true,
+//     "forceConsistentCasingInFileNames": true,
+
+//     "sourceMap": true,
+//     "declaration": true,
+//     "declarationMap": true,
+
+//     "noUncheckedIndexedAccess": true,
+//     "exactOptionalPropertyTypes": true,
+//     "types": ["node"]
+//   }
+// }
+
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  }
+}
