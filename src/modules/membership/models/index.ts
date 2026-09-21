@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { ORGANIZATION_ROLES } from "../../_shared/constants";
+import { ORGANIZATION_ROLES } from "../../_shared/constants.js";
 
 const membershipSchema = new mongoose.Schema(
   {

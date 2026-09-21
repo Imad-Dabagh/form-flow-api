@@ -1,4 +1,4 @@
-import type { baseServiceDataPropI } from "../modules/_shared";
+import type { baseServiceDataPropI } from "../modules/_shared/index.js";
 
 interface CleanQueryParamsOptions {
   allowedPopulate?: readonly string[];

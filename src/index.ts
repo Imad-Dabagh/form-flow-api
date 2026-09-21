@@ -1,7 +1,7 @@
 import express from "express";
-import config from "./config";
-import loaders from "./loaders";
-import { Logger } from "./services";
+import config from "./config/index.js";
+import loaders from "./loaders/index.js";
+import { Logger } from "./services/index.js";
 
 async function start() {
   const app = express();

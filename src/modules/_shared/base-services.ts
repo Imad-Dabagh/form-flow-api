@@ -1,5 +1,5 @@
 import type { Model, PipelineStage, PopulateOptions, UpdateQuery } from "mongoose";
-import { notFound } from "../../utils/errors";
+import { notFound } from "../../utils/errors.js";
 
 type Entity = Record<string, unknown>;
 type Query = Record<string, unknown>;

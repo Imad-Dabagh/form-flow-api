@@ -1,10 +1,10 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { authenticate } from "../../middlewares";
-import { ORGANIZATION_ROLES } from "../../modules/_shared/constants";
-import Membership from "../../modules/membership/models";
-import Organization from "../../modules/organization/models";
-import { badRequest, conflict, internalError } from "../../utils/errors";
+import { authenticate } from "../../middlewares/index.js";
+import { ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
+import Membership from "../../modules/membership/models/index.js";
+import Organization from "../../modules/organization/models/index.js";
+import { badRequest, conflict, internalError } from "../../utils/errors.js";
 
 const router = Router();
 const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

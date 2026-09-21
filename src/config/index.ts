@@ -20,11 +20,15 @@ function getPort(): number {
   return port;
 }
 
-function getCorsOrigins(): string[] | true {
+function getCorsOrigins(): string[] {
   const configuredOrigins = process.env.CORS_ORIGINS?.trim();
 
   if (!configuredOrigins) {
-    return true;
+    if (env === "development") {
+      return ["http://localhost:3000"];
+    }
+
+    throw new Error("CORS_ORIGINS is required outside development.");
   }
 
   return configuredOrigins
@@ -40,7 +44,12 @@ const config = {
   isProduction: env === "production",
   port: getPort(),
   mongoUri: requiredEnv("MONGO_URI"),
-  jwtSecret: requiredEnv("JWT_SECRET"),
+  betterAuthSecret: requiredEnv("BETTER_AUTH_SECRET"),
+  betterAuthUrl: requiredEnv("BETTER_AUTH_URL"),
+  googleClientId: requiredEnv("GOOGLE_CLIENT_ID"),
+  googleClientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
+  resendApiKey: requiredEnv("RESEND_API_KEY"),
+  authEmailFrom: requiredEnv("AUTH_EMAIL_FROM"),
   corsOrigins: getCorsOrigins(),
 };
 

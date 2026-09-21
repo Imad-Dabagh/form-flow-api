@@ -1,5 +1,5 @@
-import { BaseServices } from "../../_shared";
-import Model from "../models";
+import { BaseServices } from "../../_shared/index.js";
+import Model from "../models/index.js";
 
 const services = BaseServices(Model);
 

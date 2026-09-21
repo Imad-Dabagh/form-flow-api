@@ -1,5 +1,5 @@
-import type { MembershipRole } from "../../modules/membership/types";
-import { ABILITIES, type Ability } from "./abilities";
+import type { MembershipRole } from "../../modules/membership/types/index.js";
+import { ABILITIES, type Ability } from "./abilities.js";
 
 export const ROLE_ABILITIES: Record<MembershipRole, readonly Ability[]> = {
   ADMIN: ABILITIES,
