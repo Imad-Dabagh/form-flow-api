@@ -1,13 +1,14 @@
 
 import type { Express } from "express";
-import expressLoader from "./express";
-import mongooseLoader from "./mongoose";
-import { Logger } from "../services";
+import { createAuth } from "../auth/index.js";
+import { Logger } from "../services/index.js";
+import expressLoader from "./express/index.js";
+import mongooseLoader from "./mongoose/index.js";
 
 export default async function loadApplication(app: Express): Promise<void> {
-  await mongooseLoader();
+  const mongo = await mongooseLoader();
   Logger.info("✅ DB loaded and connected!");
 
-  expressLoader(app);
+  expressLoader(app, createAuth(mongo.database, mongo.client));
   Logger.info("✅ Express app loaded!");
 }

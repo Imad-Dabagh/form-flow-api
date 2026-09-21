@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler } from "express";
-import { AsyncHook, Logger } from "../services";
-import { AppError, badRequest, conflict, internalError } from "../utils/errors";
+import { AsyncHook, Logger } from "../services/index.js";
+import { AppError, badRequest, conflict, internalError } from "../utils/errors.js";
 
 type MongoLikeError = Error & {
   code?: number;

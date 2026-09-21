@@ -1,8 +1,8 @@
 import type { RequestHandler } from "express";
-import MembershipModule from "../modules/membership";
-import UserModule from "../modules/user";
-import { AsyncHook } from "../services";
-import { unauthenticated, unauthorized } from "../utils/errors";
+import MembershipModule from "../modules/membership/index.js";
+import UserModule from "../modules/user/index.js";
+import { AsyncHook } from "../services/index.js";
+import { unauthenticated, unauthorized } from "../utils/errors.js";
 
 type UserRecord = {
   platformRoles?: string[];

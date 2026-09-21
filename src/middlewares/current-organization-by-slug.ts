@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
-import OrganizationModule from "../modules/organization";
-import { AsyncHook } from "../services";
-import { badRequest, notFound } from "../utils/errors";
+import OrganizationModule from "../modules/organization/index.js";
+import { AsyncHook } from "../services/index.js";
+import { badRequest, notFound } from "../utils/errors.js";
 
 type OrganizationRecord = {
   _id: { toString(): string };

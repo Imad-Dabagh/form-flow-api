@@ -44,7 +44,7 @@ function toOrganizationResponse(organization: {
 }
 
 /**
- * GET /orgs
+ * GET /api/orgs
  */
 router.get("/", authenticate, async (req, res, next) => {
   try {
@@ -91,7 +91,7 @@ router.get("/", authenticate, async (req, res, next) => {
 });
 
 /**
- * POST /orgs
+ * POST /api/orgs
  */
 router.post("/", authenticate, async (req, res, next) => {
   const session = await mongoose.startSession();

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { PLATFORM_ROLES } from "../../_shared/constants";
+import { PLATFORM_ROLES } from "../../_shared/constants.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -9,9 +9,13 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    username: {
+    authUserId: {
       type: String,
       required: true,
+      trim: true,
+    },
+    username: {
+      type: String,
       lowercase: true,
       trim: true,
     },
@@ -24,14 +28,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
-    },
-    password: {
-      type: String,
-      select: false,
-    },
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
     },
     profilePic: {
       type: String,
@@ -71,7 +67,8 @@ const userSchema = new mongoose.Schema(
 
 // One global identity can hold memberships in many organizations.
 userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ username: 1 }, { unique: true });
+userSchema.index({ authUserId: 1 }, { unique: true });
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
 const User = mongoose.models.User ?? mongoose.model("User", userSchema);
 

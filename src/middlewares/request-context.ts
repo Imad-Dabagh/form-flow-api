@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { AsyncHook } from "../services";
+import { AsyncHook } from "../services/index.js";
 
 const requestContext: RequestHandler = (req, res, next) => {
   AsyncHook.runWithRequestContext(

@@ -1,7 +1,10 @@
-import type { MembershipRole } from "../modules/membership/types";
+import type { MembershipRole } from "../modules/membership/types/index.js";
 
 export interface AuthenticatedRequestUser {
   userId: string;
+  authUserId: string;
+  email: string;
+  isEmailVerified: boolean;
 }
 
 export interface OrganizationRequestContext {
