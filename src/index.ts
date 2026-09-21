@@ -1,5 +1,5 @@
-import "dotenv/config";
 import express from "express";
+import config from "./config";
 import loaders from "./loaders";
 import { Logger } from "./services";
 
@@ -8,9 +8,8 @@ async function start() {
 
   await loaders(app);
 
-  const port = Number(process.env.PORT) || 3000;
-  app.listen(port, () => {
-    Logger.info(`✅ Server listening on http://localhost:${port}`);
+  app.listen(config.port, () => {
+    Logger.info(`✅ Server listening on http://localhost:${config.port}`);
   });
 }
 

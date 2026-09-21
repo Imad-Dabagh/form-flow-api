@@ -1,9 +1,9 @@
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
+import config from "../../config";
 import User from "../../modules/user/models";
-import { Logger } from "../../services";
-import { badRequest, conflict, internalError, invalidCredentials } from "../../utils/errors";
+import { badRequest, conflict, invalidCredentials } from "../../utils/errors";
 
 const router = Router();
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,17 +73,6 @@ function validatePassword(password: string): void {
   }
 }
 
-function getJwtSecret(): string {
-  const jwtSecret = process.env.JWT_SECRET;
-
-  if (!jwtSecret) {
-    Logger.error("JWT_SECRET is missing while issuing an access token");
-    throw internalError();
-  }
-
-  return jwtSecret;
-}
-
 function toPublicUser(user: {
   _id: unknown;
   email: string;
@@ -108,7 +97,7 @@ function toPublicUser(user: {
 
 function createAuthenticationResult(user: Parameters<typeof toPublicUser>[0]): AuthenticationResult {
   const publicUser = toPublicUser(user);
-  const token = jwt.sign({ sub: publicUser.id }, getJwtSecret(), {
+  const token = jwt.sign({ sub: publicUser.id }, config.jwtSecret, {
     algorithm: "HS256",
     expiresIn: ACCESS_TOKEN_EXPIRES_IN,
   });
@@ -132,8 +121,6 @@ router.post("/register", async (req, res, next) => {
     if (!USERNAME_PATTERN.test(username)) {
       throw badRequest("username must be 3 to 32 letters, numbers, or underscores.");
     }
-
-    getJwtSecret();
 
     const normalizedEmail = email.toLowerCase();
     const normalizedUsername = username.toLowerCase();

@@ -1,8 +1,8 @@
 import type { RequestHandler } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
-import { Logger } from "../services";
+import config from "../config";
 import type { AuthenticatedRequestUser } from "../types/global";
-import { internalError, unauthenticated } from "../utils/errors";
+import { unauthenticated } from "../utils/errors";
 
 function getBearerToken(authorization?: string): string | undefined {
   const [scheme, token, ...extra] = authorization?.trim().split(/\s+/) ?? [];
@@ -35,14 +35,8 @@ const attachJwt: RequestHandler = (req, _res, next) => {
     return next(unauthenticated());
   }
 
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret) {
-    Logger.error("JWT_SECRET is missing while validating a request token");
-    return next(internalError());
-  }
-
   try {
-    const payload = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ["HS256"] });
     const authenticatedUser = getAuthenticatedUser(payload);
 
     if (!authenticatedUser) {

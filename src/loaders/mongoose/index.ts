@@ -1,12 +1,7 @@
 import mongoose from "mongoose";
+import config from "../../config";
 
 export default async function mongooseLoader() {
-  const databaseUrl = process.env.MONGO_URI;
-
-  if (!databaseUrl) {
-    throw new Error("MONGO_URI is required");
-  }
-
-  const connection = await mongoose.connect(databaseUrl);
+  const connection = await mongoose.connect(config.mongoUri);
   return connection.connection.db;
 }
