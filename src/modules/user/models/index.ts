@@ -14,11 +14,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    username: {
-      type: String,
-      lowercase: true,
-      trim: true,
-    },
     firstName: {
       type: String,
       trim: true,
@@ -68,7 +63,6 @@ const userSchema = new mongoose.Schema(
 // One global identity can hold memberships in many organizations.
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ authUserId: 1 }, { unique: true });
-userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
 const User = mongoose.models.User ?? mongoose.model("User", userSchema);
 

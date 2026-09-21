@@ -3,6 +3,10 @@ import type { RequestHandler } from "express";
 import type { Auth } from "../auth/index.js";
 import User from "../modules/user/models/index.js";
 
+function getInitialFirstName(email: string, name?: string | null): string {
+  return name?.trim() || email.split("@", 1)[0];
+}
+
 export default function createAttachSession(auth: Auth): RequestHandler {
   return async (req, _res, next) => {
     try {
@@ -20,7 +24,11 @@ export default function createAttachSession(auth: Auth): RequestHandler {
 
       if (!user) {
         try {
-          user = await User.create({ authUserId, email });
+          user = await User.create({
+            authUserId,
+            email,
+            firstName: getInitialFirstName(email, session.user.name),
+          });
         } catch (error) {
           user = await User.findOne({ authUserId }).select("_id").lean();
 
