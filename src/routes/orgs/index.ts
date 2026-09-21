@@ -1,0 +1,159 @@
+import { Router } from "express";
+import mongoose from "mongoose";
+import { authenticate } from "../../middlewares";
+import { ORGANIZATION_ROLES } from "../../modules/_shared/constants";
+import Membership from "../../modules/membership/models";
+import Organization from "../../modules/organization/models";
+import { badRequest, conflict, internalError } from "../../utils/errors";
+
+const router = Router();
+const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function getBody(req: { body: unknown }): Record<string, unknown> {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    throw badRequest("A JSON object is required.");
+  }
+
+  return req.body as Record<string, unknown>;
+}
+
+function requiredString(body: Record<string, unknown>, field: string): string {
+  const value = body[field];
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest(`${field} is required.`);
+  }
+
+  return value.trim();
+}
+
+function toOrganizationResponse(organization: {
+  _id: unknown;
+  name: string;
+  slug: string;
+  logo?: string;
+  primaryColor?: string;
+}): Record<string, string> {
+  return {
+    id: String(organization._id),
+    name: organization.name,
+    slug: organization.slug,
+    logo: organization.logo ?? "",
+    primaryColor: organization.primaryColor ?? "blue",
+  };
+}
+
+/**
+ * GET /orgs
+ */
+router.get("/", authenticate, async (req, res, next) => {
+  try {
+    const memberships = await Membership.find({ userId: req.auth!.userId })
+      .select("role organizationId")
+      .populate({
+        path: "organizationId",
+        match: { archivedAt: null, isDisabled: false },
+        select: "name slug logo primaryColor",
+      })
+      .sort({ createdAt: 1 });
+
+    const organizations = memberships.flatMap((membership) => {
+      const organization = membership.organizationId;
+
+      if (
+        !organization ||
+        typeof organization !== "object" ||
+        !("_id" in organization)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          ...toOrganizationResponse(
+            organization as {
+              _id: unknown;
+              name: string;
+              slug: string;
+              logo?: string;
+              primaryColor?: string;
+            },
+          ),
+          role: membership.role,
+        },
+      ];
+    });
+
+    return res.status(200).json({ success: true, data: organizations });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * POST /orgs
+ */
+router.post("/", authenticate, async (req, res, next) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const body = getBody(req);
+    const name = requiredString(body, "name");
+    const slug = requiredString(body, "slug").toLowerCase();
+
+    if (name.length > 50) {
+      throw badRequest("name must be 50 characters or fewer.");
+    }
+
+    if (!ORGANIZATION_SLUG_PATTERN.test(slug)) {
+      throw badRequest(
+        "slug must use lowercase letters, numbers, and single hyphens only.",
+      );
+    }
+
+    const organization = await session.withTransaction(async () => {
+      const slugAlreadyInUse = await Organization.exists({ slug }).session(
+        session,
+      );
+
+      if (slugAlreadyInUse) {
+        throw conflict("This organization slug is already in use.");
+      }
+
+      const [createdOrganization] = await Organization.create(
+        [{ name, slug }],
+        { session },
+      );
+      await Membership.create(
+        [
+          {
+            userId: req.auth!.userId,
+            organizationId: createdOrganization._id,
+            role: ORGANIZATION_ROLES.ADMIN,
+          },
+        ],
+        { session },
+      );
+
+      return createdOrganization;
+    });
+
+    if (!organization) {
+      throw internalError();
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        ...toOrganizationResponse(organization),
+        role: ORGANIZATION_ROLES.ADMIN,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  } finally {
+    await session.endSession();
+  }
+});
+
+export default router;

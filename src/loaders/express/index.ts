@@ -5,6 +5,7 @@ import { attachJwt, handleErrors, requestContext } from "../../middlewares";
 import { notFound } from "../../utils/errors";
 import authRoutes from "../../routes/auth";
 import meRoutes from "../../routes/me";
+import organizationRoutes from "../../routes/orgs";
 
 function getCorsOrigins(): string[] | true {
   const configuredOrigins = process.env.CORS_ORIGINS;
@@ -38,6 +39,7 @@ export default function expressLoader(app: Express): void {
 
   app.use("/auth", authRoutes);
   app.use("/me", meRoutes);
+  app.use("/orgs", organizationRoutes);
 
   app.use((_req, _res, next) => next(notFound("Endpoint")));
   app.use(handleErrors);
