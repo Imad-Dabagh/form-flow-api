@@ -1,6 +1,7 @@
 import { fromNodeHeaders } from "better-auth/node";
 import type { RequestHandler } from "express";
 import type { Auth } from "../auth/index.js";
+import { isSuperAdminEmail } from "../lib/platform-admins.js";
 import User from "../modules/user/models/index.js";
 
 function getInitialFirstName(email: string, name?: string | null): string {
@@ -43,6 +44,7 @@ export default function createAttachSession(auth: Auth): RequestHandler {
         authUserId,
         email,
         isEmailVerified: session.user.emailVerified,
+        isSuperAdmin: isSuperAdminEmail(email),
       };
 
       return next();

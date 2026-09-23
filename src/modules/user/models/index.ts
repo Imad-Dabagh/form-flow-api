@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { PLATFORM_ROLES } from "../../_shared/constants.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -50,11 +49,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
-    },
-    platformRoles: {
-      type: [String],
-      enum: Object.values(PLATFORM_ROLES),
-      default: [],
     },
   },
   { timestamps: true },

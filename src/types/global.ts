@@ -5,6 +5,7 @@ export interface AuthenticatedRequestUser {
   authUserId: string;
   email: string;
   isEmailVerified: boolean;
+  isSuperAdmin: boolean;
 }
 
 export interface OrganizationRequestContext {

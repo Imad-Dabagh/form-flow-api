@@ -43,16 +43,34 @@ function toOrganizationResponse(organization: {
   };
 }
 
+function activeOrganizationQuery() {
+  return { archivedAt: null, isDisabled: false };
+}
+
 /**
  * GET /api/orgs
  */
 router.get("/", authenticate, async (req, res, next) => {
   try {
+    if (req.auth!.isSuperAdmin) {
+      const organizations = await Organization.find({ archivedAt: null })
+        .select("name slug logo primaryColor")
+        .sort({ createdAt: 1 });
+
+      return res.status(200).json({
+        success: true,
+        data: organizations.map((organization) => ({
+          ...toOrganizationResponse(organization),
+          role: null,
+        })),
+      });
+    }
+
     const memberships = await Membership.find({ userId: req.auth!.userId })
       .select("role organizationId")
       .populate({
         path: "organizationId",
-        match: { archivedAt: null, isDisabled: false },
+        match: activeOrganizationQuery(),
         select: "name slug logo primaryColor",
       })
       .sort({ createdAt: 1 });

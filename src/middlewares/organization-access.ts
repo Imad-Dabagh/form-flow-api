@@ -1,12 +1,7 @@
 import type { RequestHandler } from "express";
 import MembershipModule from "../modules/membership/index.js";
-import UserModule from "../modules/user/index.js";
 import { AsyncHook } from "../services/index.js";
 import { unauthenticated, unauthorized } from "../utils/errors.js";
-
-type UserRecord = {
-  platformRoles?: string[];
-};
 
 type MembershipRecord = {
   role: "ADMIN" | "MANAGER" | "USER";
@@ -22,17 +17,7 @@ const organizationAccess: RequestHandler = async (req, _res, next) => {
   }
 
   try {
-    const user = (await UserModule.services.fetchById({
-      id: req.auth.userId,
-      selection: ["platformRoles"],
-    })) as UserRecord | null;
-
-    if (!user) {
-      return next(unauthenticated());
-    }
-
-    const isSuperAdmin = user.platformRoles?.includes("SUPER_ADMIN") ?? false;
-    if (isSuperAdmin) {
+    if (req.auth.isSuperAdmin) {
       req.organizationAccess = {
         ...req.organization,
         isSuperAdmin: true,

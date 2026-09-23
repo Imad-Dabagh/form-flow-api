@@ -25,7 +25,7 @@ router.get("/", authenticate, async (req, res, next) => {
         lastName: user.lastName ?? "",
         profilePic: user.profilePic ?? "",
         isEmailVerified: req.auth!.isEmailVerified,
-        platformRoles: user.platformRoles ?? [],
+        isSuperAdmin: req.auth!.isSuperAdmin,
       },
     });
   } catch (error) {
