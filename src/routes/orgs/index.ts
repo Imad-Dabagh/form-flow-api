@@ -8,6 +8,11 @@ import { badRequest, conflict, internalError } from "../../utils/errors.js";
 
 const router = Router();
 const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ORGANIZATION_ROLE_PRIORITY: Record<string, number> = {
+  [ORGANIZATION_ROLES.ADMIN]: 0,
+  [ORGANIZATION_ROLES.MANAGER]: 1,
+  [ORGANIZATION_ROLES.USER]: 2,
+};
 
 function getBody(req: { body: unknown }): Record<string, unknown> {
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
@@ -74,6 +79,12 @@ router.get("/", authenticate, async (req, res, next) => {
         select: "name slug logo primaryColor",
       })
       .sort({ createdAt: 1 });
+
+    memberships.sort(
+      (left, right) =>
+        ORGANIZATION_ROLE_PRIORITY[left.role] -
+        ORGANIZATION_ROLE_PRIORITY[right.role],
+    );
 
     const organizations = memberships.flatMap((membership) => {
       const organization = membership.organizationId;
