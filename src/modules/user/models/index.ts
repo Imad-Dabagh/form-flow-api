@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    onboardingCompletedAt: {
+      type: Date,
+      default: null,
+    },
     coverPhoto: {
       type: String,
       trim: true,
