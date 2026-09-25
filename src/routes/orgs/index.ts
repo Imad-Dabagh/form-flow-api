@@ -4,6 +4,7 @@ import { authenticate } from "../../middlewares/index.js";
 import { ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
 import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
+import User from "../../modules/user/models/index.js";
 import { badRequest, conflict, internalError } from "../../utils/errors.js";
 
 const router = Router();
@@ -140,6 +141,10 @@ router.post("/", authenticate, async (req, res, next) => {
       );
     }
 
+    if (slug.length > 20) {
+      throw badRequest("slug must be 20 characters or fewer.");
+    }
+
     const organization = await session.withTransaction(async () => {
       const slugAlreadyInUse = await Organization.exists({ slug }).session(
         session,
@@ -161,6 +166,11 @@ router.post("/", authenticate, async (req, res, next) => {
             role: ORGANIZATION_ROLES.ADMIN,
           },
         ],
+        { session },
+      );
+      await User.updateOne(
+        { _id: req.auth!.userId, onboardingCompletedAt: null },
+        { $set: { onboardingCompletedAt: new Date() } },
         { session },
       );
 
