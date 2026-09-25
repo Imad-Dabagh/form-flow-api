@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middlewares/index.js";
+import Membership from "../../modules/membership/models/index.js";
 import User from "../../modules/user/models/index.js";
 import { badRequest, unauthenticated } from "../../utils/errors.js";
 
@@ -88,7 +89,14 @@ router.patch("/", authenticate, async (req, res, next) => {
 
     user.firstName = firstName;
     user.lastName = lastName;
-    user.onboardingCompletedAt ??= new Date();
+    const hasOrganization = await Membership.exists({
+      userId: req.auth!.userId,
+    });
+
+    if (hasOrganization) {
+      user.onboardingCompletedAt ??= new Date();
+    }
+
     await user.save();
 
     return res.status(200).json({
