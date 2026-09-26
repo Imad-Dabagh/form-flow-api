@@ -1,7 +1,11 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { authenticate } from "../../middlewares/index.js";
-import { ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
+import {
+  ORGANIZATION_PRIMARY_COLORS,
+  ORGANIZATION_ROLES,
+  type OrganizationPrimaryColor,
+} from "../../modules/_shared/constants.js";
 import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
@@ -14,6 +18,7 @@ const ORGANIZATION_ROLE_PRIORITY: Record<string, number> = {
   [ORGANIZATION_ROLES.MANAGER]: 1,
   [ORGANIZATION_ROLES.USER]: 2,
 };
+const organizationPrimaryColors = Object.values(ORGANIZATION_PRIMARY_COLORS);
 
 function getBody(req: { body: unknown }): Record<string, unknown> {
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
@@ -33,6 +38,29 @@ function requiredString(body: Record<string, unknown>, field: string): string {
   return value.trim();
 }
 
+function getPrimaryColor(
+  body: Record<string, unknown>,
+): OrganizationPrimaryColor {
+  const value = body.primaryColor ?? ORGANIZATION_PRIMARY_COLORS.BLUE;
+
+  if (
+    typeof value !== "string" ||
+    !organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
+  ) {
+    throw badRequest(
+      `primaryColor must be one of: ${organizationPrimaryColors.join(", ")}.`,
+    );
+  }
+
+  return value as OrganizationPrimaryColor;
+}
+
+function normalizePrimaryColor(value?: string): OrganizationPrimaryColor {
+  return organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
+    ? (value as OrganizationPrimaryColor)
+    : ORGANIZATION_PRIMARY_COLORS.BLUE;
+}
+
 function toOrganizationResponse(organization: {
   _id: unknown;
   name: string;
@@ -45,7 +73,7 @@ function toOrganizationResponse(organization: {
     name: organization.name,
     slug: organization.slug,
     logo: organization.logo ?? "",
-    primaryColor: organization.primaryColor ?? "blue",
+    primaryColor: normalizePrimaryColor(organization.primaryColor),
   };
 }
 
@@ -130,6 +158,7 @@ router.post("/", authenticate, async (req, res, next) => {
     const body = getBody(req);
     const name = requiredString(body, "name");
     const slug = requiredString(body, "slug").toLowerCase();
+    const primaryColor = getPrimaryColor(body);
 
     if (name.length > 50) {
       throw badRequest("name must be 50 characters or fewer.");
@@ -155,7 +184,7 @@ router.post("/", authenticate, async (req, res, next) => {
       }
 
       const [createdOrganization] = await Organization.create(
-        [{ name, slug }],
+        [{ name, slug, primaryColor }],
         { session },
       );
       await Membership.create(

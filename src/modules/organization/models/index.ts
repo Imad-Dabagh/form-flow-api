@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ORGANIZATION_PRIMARY_COLORS } from "../../_shared/constants.js";
 
 const organizationSchema = new mongoose.Schema(
   {
@@ -41,7 +42,8 @@ const organizationSchema = new mongoose.Schema(
     },
     primaryColor: {
       type: String,
-      default: "blue",
+      enum: Object.values(ORGANIZATION_PRIMARY_COLORS),
+      default: ORGANIZATION_PRIMARY_COLORS.BLUE,
     },
     isDisabled: {
       type: Boolean,
