@@ -3,6 +3,7 @@ import { authenticate } from "../../middlewares/index.js";
 import Membership from "../../modules/membership/models/index.js";
 import User from "../../modules/user/models/index.js";
 import { badRequest, unauthenticated } from "../../utils/errors.js";
+import { optionalHttpsUrl } from "../../utils/request-values.js";
 
 const router = Router();
 
@@ -81,6 +82,7 @@ router.patch("/", authenticate, async (req, res, next) => {
     const body = getBody(req);
     const firstName = requiredName(body, "firstName");
     const lastName = requiredName(body, "lastName");
+    const profilePic = optionalHttpsUrl(body, "profilePic");
     const user = await User.findById(req.auth!.userId);
 
     if (!user) {
@@ -89,6 +91,9 @@ router.patch("/", authenticate, async (req, res, next) => {
 
     user.firstName = firstName;
     user.lastName = lastName;
+    if (profilePic !== undefined) {
+      user.profilePic = profilePic;
+    }
     const hasOrganization = await Membership.exists({
       userId: req.auth!.userId,
     });

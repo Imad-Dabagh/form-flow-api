@@ -10,6 +10,7 @@ import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
 import { badRequest, conflict, internalError } from "../../utils/errors.js";
+import { optionalHttpsUrl } from "../../utils/request-values.js";
 
 const router = Router();
 const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -159,6 +160,7 @@ router.post("/", authenticate, async (req, res, next) => {
     const name = requiredString(body, "name");
     const slug = requiredString(body, "slug").toLowerCase();
     const primaryColor = getPrimaryColor(body);
+    const logo = optionalHttpsUrl(body, "logo");
 
     if (name.length > 50) {
       throw badRequest("name must be 50 characters or fewer.");
@@ -184,7 +186,7 @@ router.post("/", authenticate, async (req, res, next) => {
       }
 
       const [createdOrganization] = await Organization.create(
-        [{ name, slug, primaryColor }],
+        [{ name, slug, primaryColor, ...(logo !== undefined ? { logo } : {}) }],
         { session },
       );
       await Membership.create(
