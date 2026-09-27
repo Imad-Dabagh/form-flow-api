@@ -49,6 +49,21 @@ export const notFound = (entity = "Resource") =>
 export const conflict = (message = "The resource already exists.") =>
   new AppError(message, { statusCode: 409, code: "CONFLICT" });
 
+export const payloadTooLarge = (message = "The request payload is too large.") =>
+  new AppError(message, { statusCode: 413, code: "PAYLOAD_TOO_LARGE" });
+
+export const unsupportedMediaType = (message = "The media type is not supported.") =>
+  new AppError(message, {
+    statusCode: 415,
+    code: "UNSUPPORTED_MEDIA_TYPE",
+  });
+
+export const tooManyRequests = (message = "Too many requests.") =>
+  new AppError(message, {
+    statusCode: 429,
+    code: "TOO_MANY_REQUESTS",
+  });
+
 export const internalError = () =>
   new AppError("Something went wrong.", {
     statusCode: 500,
