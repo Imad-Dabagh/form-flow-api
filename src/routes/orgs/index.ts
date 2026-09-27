@@ -1,6 +1,11 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { authenticate } from "../../middlewares/index.js";
+import {
+  authenticate,
+  authorize,
+  currentOrganizationBySlug,
+  organizationAccess,
+} from "../../middlewares/index.js";
 import {
   ORGANIZATION_PRIMARY_COLORS,
   ORGANIZATION_ROLES,
@@ -9,7 +14,12 @@ import {
 import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
-import { badRequest, conflict, internalError } from "../../utils/errors.js";
+import {
+  badRequest,
+  conflict,
+  internalError,
+  notFound,
+} from "../../utils/errors.js";
 import { optionalHttpsUrl } from "../../utils/request-values.js";
 
 const router = Router();
@@ -20,6 +30,13 @@ const ORGANIZATION_ROLE_PRIORITY: Record<string, number> = {
   [ORGANIZATION_ROLES.USER]: 2,
 };
 const organizationPrimaryColors = Object.values(ORGANIZATION_PRIMARY_COLORS);
+const editableOrganizationFields = new Set([
+  "name",
+  "logo",
+  "primaryColor",
+  "slogan",
+  "shortDescription",
+]);
 
 function getBody(req: { body: unknown }): Record<string, unknown> {
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
@@ -37,6 +54,25 @@ function requiredString(body: Record<string, unknown>, field: string): string {
   }
 
   return value.trim();
+}
+
+function editableText(
+  body: Record<string, unknown>,
+  field: string,
+  maxLength: number,
+): string {
+  const value = body[field];
+
+  if (typeof value !== "string") {
+    throw badRequest(`${field} must be a string.`);
+  }
+
+  const text = value.trim();
+  if (text.length > maxLength) {
+    throw badRequest(`${field} must be ${maxLength} characters or fewer.`);
+  }
+
+  return text;
 }
 
 function getPrimaryColor(
@@ -68,6 +104,8 @@ function toOrganizationResponse(organization: {
   slug: string;
   logo?: string;
   primaryColor?: string;
+  slogan?: string;
+  shortDescription?: string;
 }): Record<string, string> {
   return {
     id: String(organization._id),
@@ -75,6 +113,8 @@ function toOrganizationResponse(organization: {
     slug: organization.slug,
     logo: organization.logo ?? "",
     primaryColor: normalizePrimaryColor(organization.primaryColor),
+    slogan: organization.slogan ?? "",
+    shortDescription: organization.shortDescription ?? "",
   };
 }
 
@@ -88,15 +128,26 @@ function activeOrganizationQuery() {
 router.get("/", authenticate, async (req, res, next) => {
   try {
     if (req.auth!.isSuperAdmin) {
-      const organizations = await Organization.find({ archivedAt: null })
-        .select("name slug logo primaryColor")
-        .sort({ createdAt: 1 });
+      const [organizations, memberships] = await Promise.all([
+        Organization.find({ archivedAt: null })
+          .select("name slug logo primaryColor slogan shortDescription")
+          .sort({ createdAt: 1 }),
+        Membership.find({ userId: req.auth!.userId })
+          .select("role organizationId")
+          .lean(),
+      ]);
+      const roleByOrganizationId = new Map<string, string>(
+        memberships.map((membership): [string, string] => [
+          String(membership.organizationId),
+          membership.role,
+        ]),
+      );
 
       return res.status(200).json({
         success: true,
         data: organizations.map((organization) => ({
           ...toOrganizationResponse(organization),
-          role: null,
+          role: roleByOrganizationId.get(String(organization._id)) ?? null,
         })),
       });
     }
@@ -106,7 +157,7 @@ router.get("/", authenticate, async (req, res, next) => {
       .populate({
         path: "organizationId",
         match: activeOrganizationQuery(),
-        select: "name slug logo primaryColor",
+        select: "name slug logo primaryColor slogan shortDescription",
       })
       .sort({ createdAt: 1 });
 
@@ -136,6 +187,8 @@ router.get("/", authenticate, async (req, res, next) => {
               slug: string;
               logo?: string;
               primaryColor?: string;
+              slogan?: string;
+              shortDescription?: string;
             },
           ),
           role: membership.role,
@@ -225,5 +278,66 @@ router.post("/", authenticate, async (req, res, next) => {
     await session.endSession();
   }
 });
+
+/**
+ * PUT /api/orgs/:organizationSlug
+ */
+router.put(
+  "/:organizationSlug",
+  authenticate,
+  currentOrganizationBySlug,
+  organizationAccess,
+  authorize("organization.update"),
+  async (req, res, next) => {
+    try {
+      const body = getBody(req);
+      const fields = Object.keys(body);
+
+      if (
+        !fields.length ||
+        fields.some((field) => !editableOrganizationFields.has(field))
+      ) {
+        throw badRequest(
+          "Only name, logo, primaryColor, slogan, and shortDescription can be updated.",
+        );
+      }
+
+      const updates: Record<string, string> = {};
+
+      if ("name" in body) {
+        const name = requiredString(body, "name");
+        if (name.length > 50) {
+          throw badRequest("name must be 50 characters or fewer.");
+        }
+        updates.name = name;
+      }
+      if ("logo" in body) {
+        const logo = optionalHttpsUrl(body, "logo");
+        if (logo === undefined) throw badRequest("logo must be a URL.");
+        updates.logo = logo;
+      }
+      if ("primaryColor" in body) updates.primaryColor = getPrimaryColor(body);
+      if ("slogan" in body) updates.slogan = editableText(body, "slogan", 120);
+      if ("shortDescription" in body) {
+        updates.shortDescription = editableText(body, "shortDescription", 500);
+      }
+
+      const organization = await Organization.findOneAndUpdate(
+        { _id: req.organizationAccess!.organizationId, archivedAt: null },
+        { $set: updates },
+        { new: true, runValidators: true },
+      );
+
+      if (!organization) throw notFound("Organization");
+
+      return res.status(200).json({
+        success: true,
+        data: toOrganizationResponse(organization),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
 
 export default router;
