@@ -13,6 +13,9 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: "test-google-client-secret",
       RESEND_API_KEY: "re_test",
       AUTH_EMAIL_FROM: "Form Flow <auth@example.com>",
+      CLOUDINARY_CLOUD_NAME: "test-cloud",
+      CLOUDINARY_API_KEY: "test-key",
+      CLOUDINARY_API_SECRET: "test-secret",
     },
   },
 });

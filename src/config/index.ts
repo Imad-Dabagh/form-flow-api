@@ -50,6 +50,11 @@ const config = {
   googleClientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
   resendApiKey: requiredEnv("RESEND_API_KEY"),
   authEmailFrom: requiredEnv("AUTH_EMAIL_FROM"),
+  cloudinary: {
+    cloudName: requiredEnv("CLOUDINARY_CLOUD_NAME"),
+    apiKey: requiredEnv("CLOUDINARY_API_KEY"),
+    apiSecret: requiredEnv("CLOUDINARY_API_SECRET"),
+  },
   corsOrigins: getCorsOrigins(),
 };
 

@@ -16,14 +16,19 @@
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.7.5",
     "better-auth": "^1.7.5",
+    "busboy": "^1.6.0",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0",
+    "file-type": "^21.3.4",
     "mongodb": "^7.6.0",
     "mongoose": "^9.0.0",
     "resend": "^6.7.0"
   },
   "devDependencies": {
+    "@types/busboy": "^1.5.4",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/node": "^24.10.1",
