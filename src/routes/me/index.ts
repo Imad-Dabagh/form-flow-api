@@ -75,9 +75,9 @@ router.get("/", authenticate, async (req, res, next) => {
 });
 
 /**
- * PATCH /api/me
+ * PUT /api/me
  */
-router.patch("/", authenticate, async (req, res, next) => {
+router.put("/", authenticate, async (req, res, next) => {
   try {
     const body = getBody(req);
     const firstName = requiredName(body, "firstName");
