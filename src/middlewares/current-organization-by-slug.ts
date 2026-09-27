@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import OrganizationModule from "../modules/organization/index.js";
 import { AsyncHook } from "../services/index.js";
+import type { OrganizationRequestContext } from "../types/global.js";
 import { badRequest, notFound } from "../utils/errors.js";
 
 type OrganizationRecord = {
@@ -8,28 +9,36 @@ type OrganizationRecord = {
   slug: string;
 };
 
-const currentOrganizationBySlug: RequestHandler = async (req, _res, next) => {
-  const rawSlug = req.params.organizationSlug;
+export async function resolveOrganizationBySlug(
+  rawSlug: unknown,
+): Promise<OrganizationRequestContext> {
   const slug = typeof rawSlug === "string" ? rawSlug.trim().toLowerCase() : undefined;
 
   if (!slug) {
-    return next(badRequest("An organization slug is required."));
+    throw badRequest("An organization slug is required.");
   }
 
+  const organization = (await OrganizationModule.services.fetchOne({
+    query: { slug, archivedAt: null },
+    selection: ["_id", "slug"],
+  })) as OrganizationRecord | null;
+
+  if (!organization) {
+    throw notFound("Organization");
+  }
+
+  return {
+    organizationId: organization._id.toString(),
+    slug: organization.slug,
+  };
+}
+
+const currentOrganizationBySlug: RequestHandler = async (req, _res, next) => {
   try {
-    const organization = (await OrganizationModule.services.fetchOne({
-      query: { slug, archivedAt: null },
-      selection: ["_id", "slug"],
-    })) as OrganizationRecord | null;
+    req.organization = await resolveOrganizationBySlug(
+      req.params.organizationSlug,
+    );
 
-    if (!organization) {
-      return next(notFound("Organization"));
-    }
-
-    req.organization = {
-      organizationId: organization._id.toString(),
-      slug: organization.slug,
-    };
     AsyncHook.updateRequestContext({
       currentOrganizationId: req.organization.organizationId,
       currentOrganizationSlug: req.organization.slug,

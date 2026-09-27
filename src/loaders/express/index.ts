@@ -6,6 +6,7 @@ import type { Auth } from "../../auth/index.js";
 import config from "../../config/index.js";
 import { createAttachSession, handleErrors, requestContext } from "../../middlewares/index.js";
 import { notFound } from "../../utils/errors.js";
+import fileRoutes from "../../routes/files/index.js";
 import meRoutes from "../../routes/me/index.js";
 import organizationRoutes from "../../routes/orgs/index.js";
 
@@ -33,6 +34,7 @@ export default function expressLoader(app: Express, auth: Auth): void {
   });
 
   app.use("/api/me", meRoutes);
+  app.use("/api/upload", fileRoutes);
   app.use("/api/orgs", organizationRoutes);
 
   app.use((_req, _res, next) => next(notFound("Endpoint")));

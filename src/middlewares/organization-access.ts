@@ -1,11 +1,46 @@
 import type { RequestHandler } from "express";
 import MembershipModule from "../modules/membership/index.js";
 import { AsyncHook } from "../services/index.js";
+import type {
+  AuthenticatedRequestUser,
+  OrganizationAccessContext,
+  OrganizationRequestContext,
+} from "../types/global.js";
 import { unauthenticated, unauthorized } from "../utils/errors.js";
 
 type MembershipRecord = {
   role: "ADMIN" | "MANAGER" | "USER";
 };
+
+export async function resolveOrganizationAccess(
+  auth: AuthenticatedRequestUser,
+  organization: OrganizationRequestContext,
+): Promise<OrganizationAccessContext> {
+  if (auth.isSuperAdmin) {
+    return {
+      ...organization,
+      isSuperAdmin: true,
+    };
+  }
+
+  const membership = (await MembershipModule.services.fetchOne({
+    query: {
+      userId: auth.userId,
+      organizationId: organization.organizationId,
+    },
+    selection: ["role"],
+  })) as MembershipRecord | null;
+
+  if (!membership) {
+    throw unauthorized();
+  }
+
+  return {
+    ...organization,
+    isSuperAdmin: false,
+    membershipRole: membership.role,
+  };
+}
 
 const organizationAccess: RequestHandler = async (req, _res, next) => {
   if (!req.auth) {
@@ -17,33 +52,18 @@ const organizationAccess: RequestHandler = async (req, _res, next) => {
   }
 
   try {
-    if (req.auth.isSuperAdmin) {
-      req.organizationAccess = {
-        ...req.organization,
-        isSuperAdmin: true,
-      };
+    req.organizationAccess = await resolveOrganizationAccess(
+      req.auth,
+      req.organization,
+    );
+
+    if (req.organizationAccess.isSuperAdmin) {
       AsyncHook.updateRequestContext({ isSuperAdmin: true });
-      return next();
+    } else {
+      AsyncHook.updateRequestContext({
+        membershipRole: req.organizationAccess.membershipRole,
+      });
     }
-
-    const membership = (await MembershipModule.services.fetchOne({
-      query: {
-        userId: req.auth.userId,
-        organizationId: req.organization.organizationId,
-      },
-      selection: ["role"],
-    })) as MembershipRecord | null;
-
-    if (!membership) {
-      return next(unauthorized());
-    }
-
-    req.organizationAccess = {
-      ...req.organization,
-      isSuperAdmin: false,
-      membershipRole: membership.role,
-    };
-    AsyncHook.updateRequestContext({ membershipRole: membership.role });
 
     return next();
   } catch (error) {

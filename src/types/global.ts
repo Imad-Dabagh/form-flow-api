@@ -24,6 +24,7 @@ declare global {
       auth?: AuthenticatedRequestUser;
       organization?: OrganizationRequestContext;
       organizationAccess?: OrganizationAccessContext;
+      uploadTenantId?: string;
     }
   }
 }
