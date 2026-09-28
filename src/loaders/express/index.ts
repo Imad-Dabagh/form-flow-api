@@ -9,6 +9,7 @@ import { notFound } from "../../utils/errors.js";
 import fileRoutes from "../../routes/files/index.js";
 import meRoutes from "../../routes/me/index.js";
 import organizationRoutes from "../../routes/orgs/index.js";
+import invitationRoutes from "../../routes/invitations/index.js";
 
 export default function expressLoader(app: Express, auth: Auth): void {
   app.disable("x-powered-by");
@@ -36,6 +37,7 @@ export default function expressLoader(app: Express, auth: Auth): void {
   app.use("/api/me", meRoutes);
   app.use("/api/upload", fileRoutes);
   app.use("/api/orgs", organizationRoutes);
+  app.use("/api/invitations", invitationRoutes);
 
   app.use((_req, _res, next) => next(notFound("Endpoint")));
   app.use(handleErrors);
