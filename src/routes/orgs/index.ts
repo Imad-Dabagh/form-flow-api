@@ -19,7 +19,7 @@ import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
 import { ensureUserProfile } from "../../modules/user/services/index.js";
-import { sendOrganizationInvitationEmail } from "../../services/email/index.js";
+import { sendOrganizationInvitationEmail } from "../../services/email/send-email.js";
 import {
   badRequest,
   conflict,
@@ -522,7 +522,7 @@ router.post(
       }
 
       const organization = await Organization.findById(req.organizationAccess!.organizationId)
-        .select("name slug")
+        .select("name logo primaryColor")
         .lean();
       if (!organization) throw notFound("Organization");
 
@@ -558,6 +558,8 @@ router.post(
         await sendOrganizationInvitationEmail({
           to: email,
           organizationName: organization.name.replace(/[\r\n]/g, " "),
+          organizationColor: organization.primaryColor,
+          organizationLogo: organization.logo,
           role: body.role === ORGANIZATION_ROLES.ADMIN ? "Admin" : "Manager",
           url,
         });
