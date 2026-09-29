@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { ORGANIZATION_PRIMARY_COLORS } from "../../_shared/constants.js";
+import { ORGANIZATION_PRIMARY_COLORS } from "#app/modules/_shared/constants";
 
 const organizationSchema = new mongoose.Schema(
   {

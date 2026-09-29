@@ -1,8 +1,8 @@
 import { fromNodeHeaders } from "better-auth/node";
 import type { RequestHandler } from "express";
-import type { Auth } from "../auth/index.js";
-import { isSuperAdminEmail } from "../lib/platform-admins.js";
-import { ensureUserProfile } from "../modules/user/services/index.js";
+import type { Auth } from "#app/auth/index";
+import { isSuperAdminEmail } from "#app/lib/platform-admins";
+import { ensureUserProfile } from "#app/modules/user/services/index";
 
 export default function createAttachSession(auth: Auth): RequestHandler {
   return async (req, _res, next) => {

@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
-import { AsyncHook } from "../services/index.js";
-import { unauthenticated } from "../utils/errors.js";
+import { AsyncHook } from "#app/services/index";
+import { unauthenticated } from "#app/utils/errors";
 import { resolveOrganizationBySlug } from "./current-organization-by-slug.js";
 import { resolveOrganizationAccess } from "./organization-access.js";
 

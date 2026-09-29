@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import config from "../../config/index.js";
+import config from "#app/config/index";
 
 export default async function mongooseLoader() {
   const connection = await mongoose.connect(config.mongoUri);

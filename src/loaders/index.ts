@@ -1,7 +1,7 @@
 
 import type { Express } from "express";
-import { createAuth } from "../auth/index.js";
-import { Logger } from "../services/index.js";
+import { createAuth } from "#app/auth/index";
+import { Logger } from "#app/services/index";
 import expressLoader from "./express/index.js";
 import mongooseLoader from "./mongoose/index.js";
 

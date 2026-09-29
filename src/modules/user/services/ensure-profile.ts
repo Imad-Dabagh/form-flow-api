@@ -1,4 +1,4 @@
-import User from "../models/index.js";
+import User from "#app/modules/user/models/index";
 
 export async function ensureUserProfile(authUser: {
   id: string;

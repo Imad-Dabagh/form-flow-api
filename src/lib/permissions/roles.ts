@@ -1,4 +1,4 @@
-import type { MembershipRole } from "../../modules/membership/types/index.js";
+import type { MembershipRole } from "#app/modules/membership/types/index";
 import { ABILITIES, type Ability } from "./abilities.js";
 
 export const ROLE_ABILITIES: Record<MembershipRole, readonly Ability[]> = {

@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
-import { hasAbility, type Ability } from "../lib/permissions/index.js";
-import { unauthorized } from "../utils/errors.js";
+import { hasAbility, type Ability } from "#app/lib/permissions/index";
+import { unauthorized } from "#app/utils/errors";
 
 /**
  * Requires at least one declared ability. Routes must run authenticate,

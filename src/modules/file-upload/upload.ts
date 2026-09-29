@@ -1,10 +1,10 @@
 import busboy from "busboy";
 import type { Request } from "express";
-import { badRequest, payloadTooLarge, unsupportedMediaType } from "../../utils/errors.js";
+import { badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
 import type {
   StorageProvider,
   StoredFileMetadata,
-} from "../../services/storage/index.js";
+} from "#app/services/storage/index";
 import { createStoredFileName } from "./file-name.js";
 import { MAX_UPLOAD_BYTES, prepareUploadStream } from "./validation.js";
 

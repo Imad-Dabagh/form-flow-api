@@ -1,6 +1,6 @@
 import { Resend } from "resend";
-import config from "../../config/index.js";
-import Logger from "../logger/index.js";
+import config from "#app/config/index";
+import Logger from "#app/services/logger/index";
 import {
   magicLinkEmail,
   passwordResetEmail,

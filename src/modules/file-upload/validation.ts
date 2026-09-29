@@ -4,7 +4,7 @@ import {
   badRequest,
   payloadTooLarge,
   unsupportedMediaType,
-} from "../../utils/errors.js";
+} from "#app/utils/errors";
 import { getFileExtension } from "./file-name.js";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;

@@ -4,7 +4,7 @@ import {
   ORGANIZATION_PRIMARY_COLORS,
   ORGANIZATION_ROLES,
   type OrganizationPrimaryColor,
-} from "../modules/_shared/constants.js";
+} from "#app/modules/_shared/constants";
 import { internalError } from "./errors.js";
 
 const organizationPrimaryColors = Object.values(ORGANIZATION_PRIMARY_COLORS);

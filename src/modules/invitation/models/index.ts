@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { ORGANIZATION_ROLES } from "../../_shared/constants.js";
+import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
 
 const invitationSchema = new mongoose.Schema(
   {

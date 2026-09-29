@@ -2,15 +2,15 @@ import cors from "cors";
 import express from "express";
 import type { Express } from "express";
 import { toNodeHandler } from "better-auth/node";
-import type { Auth } from "../../auth/index.js";
-import config from "../../config/index.js";
-import { createAttachSession, handleErrors, requestContext } from "../../middlewares/index.js";
-import { notFound } from "../../utils/errors.js";
-import healthRoutes from "../../routes/health/index.js";
-import invitationRoutes from "../../routes/invitations/index.js";
-import meRoutes from "../../routes/me/index.js";
-import organizationRoutes from "../../routes/orgs/index.js";
-import uploadRoutes from "../../routes/upload/index.js";
+import type { Auth } from "#app/auth/index";
+import config from "#app/config/index";
+import { createAttachSession, handleErrors, requestContext } from "#app/middlewares/index";
+import { notFound } from "#app/utils/errors";
+import healthRoutes from "#app/routes/health/index";
+import invitationRoutes from "#app/routes/invitations/index";
+import meRoutes from "#app/routes/me/index";
+import organizationRoutes from "#app/routes/orgs/index";
+import uploadRoutes from "#app/routes/upload/index";
 
 export default function expressLoader(app: Express, auth: Auth): void {
   app.disable("x-powered-by");

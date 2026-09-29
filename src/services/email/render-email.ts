@@ -1,4 +1,4 @@
-import type { OrganizationPrimaryColor } from "../../modules/_shared/constants.js";
+import type { OrganizationPrimaryColor } from "#app/modules/_shared/constants";
 
 // Shared presentation: templates choose a brand and supply copy; this file renders both formats.
 interface EmailBrand {

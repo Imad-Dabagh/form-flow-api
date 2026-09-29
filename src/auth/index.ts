@@ -2,12 +2,12 @@ import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { betterAuth } from "better-auth";
 import { magicLink } from "better-auth/plugins";
 import type { Db, MongoClient } from "mongodb";
-import config from "../config/index.js";
+import config from "#app/config/index";
 import {
   deliverMagicLinkEmail,
   deliverPasswordResetEmail,
   deliverVerificationEmail,
-} from "../services/email/send-email.js";
+} from "#app/services/email/send-email";
 
 export function createAuth(database: Db, client: MongoClient) {
   return betterAuth({

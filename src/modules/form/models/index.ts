@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { SUB_DOCUMENTS } from "../../_shared/index.js";
+import { SUB_DOCUMENTS } from "#app/modules/_shared/index";
 
 const { FormSectionSchema } = SUB_DOCUMENTS;
 

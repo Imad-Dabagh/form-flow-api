@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
-import { AsyncHook } from "../services/index.js";
-import { unauthenticated } from "../utils/errors.js";
+import { AsyncHook } from "#app/services/index";
+import { unauthenticated } from "#app/utils/errors";
 
 const authenticate: RequestHandler = (req, _res, next) => {
   if (!req.auth) {

@@ -5,7 +5,7 @@ import {
   type UploadApiErrorResponse,
   type UploadApiResponse,
 } from "cloudinary";
-import config from "../../config/index.js";
+import config from "#app/config/index";
 import type {
   StorageProvider,
   StorageUploadInput,

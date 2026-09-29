@@ -1,12 +1,12 @@
 import type { RequestHandler } from "express";
-import MembershipModule from "../modules/membership/index.js";
-import { AsyncHook } from "../services/index.js";
+import MembershipModule from "#app/modules/membership/index";
+import { AsyncHook } from "#app/services/index";
 import type {
   AuthenticatedRequestUser,
   OrganizationAccessContext,
   OrganizationRequestContext,
-} from "../types/global.js";
-import { unauthenticated, unauthorized } from "../utils/errors.js";
+} from "#app/types/global";
+import { unauthenticated, unauthorized } from "#app/utils/errors";
 
 type MembershipRecord = {
   role: "ADMIN" | "MANAGER" | "USER";
