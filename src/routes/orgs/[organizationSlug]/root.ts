@@ -80,7 +80,7 @@ router.put(
       const organization = await Organization.findOneAndUpdate(
         { _id: req.organizationAccess!.organizationId, archivedAt: null },
         { $set: updates },
-        { new: true, runValidators: true },
+        { returnDocument: "after", runValidators: true },
       );
 
       if (!organization) throw notFound("Organization");

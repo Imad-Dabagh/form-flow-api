@@ -251,7 +251,7 @@ async function updateOne(
 ) {
   const result = await applyPopulate(
     Model.findOneAndUpdate(data.query ?? {}, data.payload as UpdateQuery<Entity>, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     })
       .select(data.selection as never)
@@ -284,11 +284,11 @@ async function updateMany(Model: Model<Entity>, data: baseServiceDataPropI) {
 
 async function disableById(Model: Model<Entity>, data: baseServiceDataPropI) {
   // Useful for future models with an isDisabled field; FormFlow does not use it yet.
-  return Model.findOneAndUpdate(queryById(data), { isDisabled: true }, { new: true }).lean();
+  return Model.findOneAndUpdate(queryById(data), { isDisabled: true }, { returnDocument: "after" }).lean();
 }
 
 async function archiveById(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return Model.findOneAndUpdate(queryById(data), { archivedAt: new Date() }, { new: true }).lean();
+  return Model.findOneAndUpdate(queryById(data), { archivedAt: new Date() }, { returnDocument: "after" }).lean();
 }
 
 async function deleteOne(Model: Model<Entity>, data: baseServiceDataPropI) {
