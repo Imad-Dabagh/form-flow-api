@@ -1,6 +1,10 @@
 export const ABILITIES = [
   "organization.read",
   "organization.update",
+  "membership.read",
+  "membership.create",
+  "membership.update",
+  "membership.delete",
   "user.read",
   "user.create",
   "user.update",

@@ -49,6 +49,10 @@ const organizationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    membershipRevision: {
+      type: Number,
+      default: 0,
+    },
     archivedAt: {
       type: Date,
       default: null,
