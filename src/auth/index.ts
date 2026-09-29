@@ -3,7 +3,11 @@ import { betterAuth } from "better-auth";
 import { magicLink } from "better-auth/plugins";
 import type { Db, MongoClient } from "mongodb";
 import config from "../config/index.js";
-import { deliverAuthEmail } from "../services/email/index.js";
+import {
+  deliverMagicLinkEmail,
+  deliverPasswordResetEmail,
+  deliverVerificationEmail,
+} from "../services/email/send-email.js";
 
 export function createAuth(database: Db, client: MongoClient) {
   return betterAuth({
@@ -19,11 +23,8 @@ export function createAuth(database: Db, client: MongoClient) {
       requireEmailVerification: true,
       revokeSessionsOnPasswordReset: true,
       async sendResetPassword({ user, url }) {
-        deliverAuthEmail({
+        deliverPasswordResetEmail({
           to: user.email,
-          subject: "Reset your Form Flow password",
-          heading: "Use the secure link below to reset your password.",
-          actionLabel: "Reset password",
           url,
         });
       },
@@ -33,11 +34,8 @@ export function createAuth(database: Db, client: MongoClient) {
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
-        deliverAuthEmail({
+        deliverVerificationEmail({
           to: user.email,
-          subject: "Verify your Form Flow email",
-          heading: "Verify your email address to continue to Form Flow.",
-          actionLabel: "Verify email",
           url,
         });
       },
@@ -64,11 +62,8 @@ export function createAuth(database: Db, client: MongoClient) {
         disableSignUp: false,
         storeToken: "hashed",
         sendMagicLink: ({ email, url }) => {
-          deliverAuthEmail({
+          deliverMagicLinkEmail({
             to: email,
-            subject: "Your Form Flow sign-in link",
-            heading: "Use this one-time link to sign in to Form Flow.",
-            actionLabel: "Sign in",
             url,
           });
         },

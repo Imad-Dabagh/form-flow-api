@@ -19,7 +19,7 @@ import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
 import { ensureUserProfile } from "../../modules/user/services/index.js";
-import { sendOrganizationInvitationEmail } from "../../services/email/index.js";
+import { sendOrganizationInvitationEmail } from "../../services/email/send-email.js";
 import {
   badRequest,
   conflict,
@@ -459,6 +459,77 @@ router.get(
 );
 
 /**
+ * GET /api/orgs/:organizationSlug/invitations
+ */
+router.get(
+  "/:organizationSlug/invitations",
+  authenticate,
+  currentOrganizationBySlug,
+  organizationAccess,
+  authorize("membership.read"),
+  async (req, res, next) => {
+    try {
+      const invitations = await Invitation.find({
+        organizationId: req.organizationAccess!.organizationId,
+        status: "PENDING",
+      })
+        .select("email role createdAt expiresAt")
+        .sort({ createdAt: -1 })
+        .lean();
+      const now = Date.now();
+
+      return res.status(200).json({
+        success: true,
+        data: invitations.map((invitation) => ({
+          id: String(invitation._id),
+          email: invitation.email,
+          role: invitation.role,
+          status: invitation.expiresAt.getTime() > now ? "PENDING" : "EXPIRED",
+          createdAt: invitation.createdAt,
+          expiresAt: invitation.expiresAt,
+        })),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+/**
+ * DELETE /api/orgs/:organizationSlug/invitations/:invitationId
+ */
+router.delete(
+  "/:organizationSlug/invitations/:invitationId",
+  authenticate,
+  currentOrganizationBySlug,
+  organizationAccess,
+  authorize("membership.delete"),
+  async (req, res, next) => {
+    try {
+      const { invitationId } = req.params;
+      if (typeof invitationId !== "string" || !mongoose.isValidObjectId(invitationId)) {
+        throw badRequest("A valid invitation ID is required.");
+      }
+
+      const invitation = await Invitation.findOneAndUpdate(
+        {
+          _id: invitationId,
+          organizationId: req.organizationAccess!.organizationId,
+          status: "PENDING",
+          expiresAt: { $gt: new Date() },
+        },
+        { $set: { status: "CANCELLED" } },
+      );
+      if (!invitation) throw notFound("Invitation");
+
+      return res.status(200).json({ success: true, data: { id: invitationId } });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+/**
  * POST /api/orgs/:organizationSlug/members
  */
 router.post(
@@ -522,7 +593,7 @@ router.post(
       }
 
       const organization = await Organization.findById(req.organizationAccess!.organizationId)
-        .select("name slug")
+        .select("name logo primaryColor")
         .lean();
       if (!organization) throw notFound("Organization");
 
@@ -558,6 +629,8 @@ router.post(
         await sendOrganizationInvitationEmail({
           to: email,
           organizationName: organization.name.replace(/[\r\n]/g, " "),
+          organizationColor: organization.primaryColor,
+          organizationLogo: organization.logo,
           role: body.role === ORGANIZATION_ROLES.ADMIN ? "Admin" : "Manager",
           url,
         });
