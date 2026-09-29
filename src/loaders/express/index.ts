@@ -6,10 +6,11 @@ import type { Auth } from "../../auth/index.js";
 import config from "../../config/index.js";
 import { createAttachSession, handleErrors, requestContext } from "../../middlewares/index.js";
 import { notFound } from "../../utils/errors.js";
-import fileRoutes from "../../routes/files/index.js";
+import healthRoutes from "../../routes/health/index.js";
+import invitationRoutes from "../../routes/invitations/index.js";
 import meRoutes from "../../routes/me/index.js";
 import organizationRoutes from "../../routes/orgs/index.js";
-import invitationRoutes from "../../routes/invitations/index.js";
+import uploadRoutes from "../../routes/upload/index.js";
 
 export default function expressLoader(app: Express, auth: Auth): void {
   app.disable("x-powered-by");
@@ -27,15 +28,10 @@ export default function expressLoader(app: Express, auth: Auth): void {
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
   app.use(createAttachSession(auth));
 
-  app.get("/health", (_, res) => {
-    res.status(200).json({
-      status: "ok",
-      uptime: process.uptime(),
-    });
-  });
+  app.use("/health", healthRoutes);
 
   app.use("/api/me", meRoutes);
-  app.use("/api/upload", fileRoutes);
+  app.use("/api/upload", uploadRoutes);
   app.use("/api/orgs", organizationRoutes);
   app.use("/api/invitations", invitationRoutes);
 
