@@ -23,6 +23,7 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
       next: () => void,
     ) => {
       const slug = req.params.organizationSlug;
+      if (!slug) throw new Error("The organization slug must reach nested routes.");
       req.organization = {
         organizationId: organizationIds[slug === "beta" ? "beta" : "alpha"],
         slug,
