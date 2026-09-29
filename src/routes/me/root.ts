@@ -1,54 +1,12 @@
 import { Router } from "express";
-import { authenticate } from "../../middlewares/index.js";
+import { z } from "zod";
+import { authenticate, validate } from "../../middlewares/index.js";
 import Membership from "../../modules/membership/models/index.js";
 import User from "../../modules/user/models/index.js";
-import { badRequest, unauthenticated } from "../../utils/errors.js";
-import { getBody, optionalHttpsUrl } from "../../utils/request-values.js";
+import { unauthenticated } from "../../utils/errors.js";
+import { httpsUrlSchema } from "../../utils/https-url-schema.js";
 
 const router = Router();
-const editableProfileFields = new Set([
-  "firstName",
-  "lastName",
-  "profilePic",
-  "coverPhoto",
-  "phone",
-  "shortDescription",
-]);
-
-function requiredName(body: Record<string, unknown>, field: string): string {
-  const value = body[field];
-
-  if (typeof value !== "string" || !value.trim()) {
-    throw badRequest(`${field} is required.`);
-  }
-
-  const name = value.trim();
-
-  if (name.length > 50) {
-    throw badRequest(`${field} must be 50 characters or fewer.`);
-  }
-
-  return name;
-}
-
-function optionalText(
-  body: Record<string, unknown>,
-  field: string,
-  maxLength: number,
-): string | undefined {
-  const value = body[field];
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") {
-    throw badRequest(`${field} must be a string.`);
-  }
-
-  const text = value.trim();
-  if (text.length > maxLength) {
-    throw badRequest(`${field} must be ${maxLength} characters or fewer.`);
-  }
-  return text;
-}
-
 function toProfileResponse(
   user: {
     _id: unknown;
@@ -101,18 +59,30 @@ router.get("/", authenticate, async (req, res, next) => {
 /**
  * PUT /api/me
  */
-router.put("/", authenticate, async (req, res, next) => {
+router.put("/", authenticate, validate({
+  body: z.strictObject({
+    firstName: z.string({ error: "firstName is required." }).trim()
+      .min(1, "firstName is required.")
+      .max(50, "firstName must be 50 characters or fewer."),
+    lastName: z.string({ error: "lastName is required." }).trim()
+      .min(1, "lastName is required.")
+      .max(50, "lastName must be 50 characters or fewer."),
+    profilePic: httpsUrlSchema("profilePic").optional(),
+    coverPhoto: httpsUrlSchema("coverPhoto").optional(),
+    phone: z.string({ error: "phone must be a string." }).trim()
+      .max(30, "phone must be 30 characters or fewer.").optional(),
+    shortDescription: z.string({ error: "shortDescription must be a string." }).trim()
+      .max(500, "shortDescription must be 500 characters or fewer.").optional(),
+  }, { error: "Only firstName, lastName, profilePic, coverPhoto, phone, and shortDescription can be updated." }),
+}), async (req, res, next) => {
   try {
-    const body = getBody(req);
-    if (Object.keys(body).some((field) => !editableProfileFields.has(field))) {
-      throw badRequest("Only firstName, lastName, profilePic, coverPhoto, phone, and shortDescription can be updated.");
-    }
-    const firstName = requiredName(body, "firstName");
-    const lastName = requiredName(body, "lastName");
-    const profilePic = optionalHttpsUrl(body, "profilePic");
-    const coverPhoto = optionalHttpsUrl(body, "coverPhoto");
-    const phone = optionalText(body, "phone", 30);
-    const shortDescription = optionalText(body, "shortDescription", 500);
+    const body = req.body;
+    const firstName = body.firstName.trim();
+    const lastName = body.lastName.trim();
+    const profilePic = body.profilePic?.trim();
+    const coverPhoto = body.coverPhoto?.trim();
+    const phone = body.phone?.trim();
+    const shortDescription = body.shortDescription?.trim();
     const user = await User.findById(req.auth!.userId);
 
     if (!user) {
