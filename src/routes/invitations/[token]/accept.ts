@@ -1,13 +1,13 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, validate } from "../../../middlewares/index.js";
-import { ORGANIZATION_ROLES } from "../../../modules/_shared/constants.js";
-import Invitation from "../../../modules/invitation/models/index.js";
-import Membership from "../../../modules/membership/models/index.js";
-import Organization from "../../../modules/organization/models/index.js";
-import { notFound, unauthorized } from "../../../utils/errors.js";
-import { getTokenHash } from "../../../utils/invitation-token.js";
+import { authenticate, validate } from "#app/middlewares/index";
+import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
+import Invitation from "#app/modules/invitation/models/index";
+import Membership from "#app/modules/membership/models/index";
+import Organization from "#app/modules/organization/models/index";
+import { notFound, unauthorized } from "#app/utils/errors";
+import { getTokenHash } from "#app/utils/invitation-token";
 
 const router = Router({ mergeParams: true });
 

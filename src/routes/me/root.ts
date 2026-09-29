@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, validate } from "../../middlewares/index.js";
-import Membership from "../../modules/membership/models/index.js";
-import User from "../../modules/user/models/index.js";
-import { unauthenticated } from "../../utils/errors.js";
-import { httpsUrlSchema } from "../../utils/https-url-schema.js";
+import { authenticate, validate } from "#app/middlewares/index";
+import Membership from "#app/modules/membership/models/index";
+import User from "#app/modules/user/models/index";
+import { unauthenticated } from "#app/utils/errors";
+import { httpsUrlSchema } from "#app/utils/https-url-schema";
 
 const router = Router();
 function toProfileResponse(

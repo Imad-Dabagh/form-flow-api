@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../middlewares/index.js";
-import Invitation from "../../../../modules/invitation/models/index.js";
-import Membership from "../../../../modules/membership/models/index.js";
-import User from "../../../../modules/user/models/index.js";
-import { tooManyRequests } from "../../../../utils/errors.js";
-import { findAuthAccount, teamEmailSchema } from "../../../../utils/organization-routes.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import Invitation from "#app/modules/invitation/models/index";
+import Membership from "#app/modules/membership/models/index";
+import User from "#app/modules/user/models/index";
+import { tooManyRequests } from "#app/utils/errors";
+import { findAuthAccount, teamEmailSchema } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
 

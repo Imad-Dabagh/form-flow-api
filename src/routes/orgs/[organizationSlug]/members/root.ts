@@ -3,17 +3,17 @@ import { rateLimit } from "express-rate-limit";
 import mongoose from "mongoose";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import config from "../../../../config/index.js";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../middlewares/index.js";
-import { ORGANIZATION_ROLES } from "../../../../modules/_shared/constants.js";
-import Invitation from "../../../../modules/invitation/models/index.js";
-import Membership from "../../../../modules/membership/models/index.js";
-import Organization from "../../../../modules/organization/models/index.js";
-import User from "../../../../modules/user/models/index.js";
-import { ensureUserProfile } from "../../../../modules/user/services/index.js";
-import { sendOrganizationInvitationEmail } from "../../../../services/email/send-email.js";
-import { conflict, internalError, notFound, tooManyRequests } from "../../../../utils/errors.js";
-import { findAuthAccount, teamEmailSchema, teamRoles } from "../../../../utils/organization-routes.js";
+import config from "#app/config/index";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
+import Invitation from "#app/modules/invitation/models/index";
+import Membership from "#app/modules/membership/models/index";
+import Organization from "#app/modules/organization/models/index";
+import User from "#app/modules/user/models/index";
+import { ensureUserProfile } from "#app/modules/user/services/index";
+import { sendOrganizationInvitationEmail } from "#app/services/email/send-email";
+import { conflict, internalError, notFound, tooManyRequests } from "#app/utils/errors";
+import { findAuthAccount, teamEmailSchema, teamRoles } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
 

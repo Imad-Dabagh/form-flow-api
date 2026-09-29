@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../middlewares/index.js";
-import { ORGANIZATION_PRIMARY_COLORS } from "../../../modules/_shared/constants.js";
-import Organization from "../../../modules/organization/models/index.js";
-import { notFound } from "../../../utils/errors.js";
-import { httpsUrlSchema } from "../../../utils/https-url-schema.js";
-import { primaryColorSchema, toOrganizationResponse } from "../../../utils/organization-routes.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { ORGANIZATION_PRIMARY_COLORS } from "#app/modules/_shared/constants";
+import Organization from "#app/modules/organization/models/index";
+import { notFound } from "#app/utils/errors";
+import { httpsUrlSchema } from "#app/utils/https-url-schema";
+import { primaryColorSchema, toOrganizationResponse } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
 

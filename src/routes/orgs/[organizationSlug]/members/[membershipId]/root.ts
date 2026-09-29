@@ -1,12 +1,12 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../../middlewares/index.js";
-import { ORGANIZATION_ROLES } from "../../../../../modules/_shared/constants.js";
-import Membership from "../../../../../modules/membership/models/index.js";
-import Organization from "../../../../../modules/organization/models/index.js";
-import { conflict, notFound } from "../../../../../utils/errors.js";
-import { teamRoles } from "../../../../../utils/organization-routes.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
+import Membership from "#app/modules/membership/models/index";
+import Organization from "#app/modules/organization/models/index";
+import { conflict, notFound } from "#app/utils/errors";
+import { teamRoles } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
 

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
-import { authenticate, resolveUploadTenant } from "../../middlewares/index.js";
-import { receiveFileUpload } from "../../modules/file-upload/index.js";
-import { storageProvider } from "../../services/index.js";
-import { tooManyRequests } from "../../utils/errors.js";
+import { authenticate, resolveUploadTenant } from "#app/middlewares/index";
+import { receiveFileUpload } from "#app/modules/file-upload/index";
+import { storageProvider } from "#app/services/index";
+import { tooManyRequests } from "#app/utils/errors";
 
 const router = Router();
 const uploadRateLimit = rateLimit({

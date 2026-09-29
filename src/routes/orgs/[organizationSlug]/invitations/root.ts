@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "../../../../middlewares/index.js";
-import Invitation from "../../../../modules/invitation/models/index.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "#app/middlewares/index";
+import Invitation from "#app/modules/invitation/models/index";
 
 const router = Router({ mergeParams: true });
 

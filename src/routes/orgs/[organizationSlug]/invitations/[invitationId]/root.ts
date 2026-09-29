@@ -1,9 +1,9 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../../middlewares/index.js";
-import Invitation from "../../../../../modules/invitation/models/index.js";
-import { notFound } from "../../../../../utils/errors.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import Invitation from "#app/modules/invitation/models/index";
+import { notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 

@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, validate } from "../../../middlewares/index.js";
-import Invitation from "../../../modules/invitation/models/index.js";
-import Organization from "../../../modules/organization/models/index.js";
-import { notFound, unauthorized } from "../../../utils/errors.js";
-import { getTokenHash } from "../../../utils/invitation-token.js";
+import { authenticate, validate } from "#app/middlewares/index";
+import Invitation from "#app/modules/invitation/models/index";
+import Organization from "#app/modules/organization/models/index";
+import { notFound, unauthorized } from "#app/utils/errors";
+import { getTokenHash } from "#app/utils/invitation-token";
 
 const router = Router({ mergeParams: true });
 

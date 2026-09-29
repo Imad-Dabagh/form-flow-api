@@ -1,14 +1,14 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, validate } from "../../middlewares/index.js";
-import { ORGANIZATION_PRIMARY_COLORS, ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
-import Membership from "../../modules/membership/models/index.js";
-import Organization from "../../modules/organization/models/index.js";
-import User from "../../modules/user/models/index.js";
-import { conflict, internalError } from "../../utils/errors.js";
-import { httpsUrlSchema } from "../../utils/https-url-schema.js";
-import { primaryColorSchema, toOrganizationResponse } from "../../utils/organization-routes.js";
+import { authenticate, validate } from "#app/middlewares/index";
+import { ORGANIZATION_PRIMARY_COLORS, ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
+import Membership from "#app/modules/membership/models/index";
+import Organization from "#app/modules/organization/models/index";
+import User from "#app/modules/user/models/index";
+import { conflict, internalError } from "#app/utils/errors";
+import { httpsUrlSchema } from "#app/utils/https-url-schema";
+import { primaryColorSchema, toOrganizationResponse } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
 
