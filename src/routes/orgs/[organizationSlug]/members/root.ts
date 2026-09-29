@@ -2,8 +2,9 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import mongoose from "mongoose";
 import { createHash, randomBytes } from "node:crypto";
+import { z } from "zod";
 import config from "../../../../config/index.js";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "../../../../middlewares/index.js";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../middlewares/index.js";
 import { ORGANIZATION_ROLES } from "../../../../modules/_shared/constants.js";
 import Invitation from "../../../../modules/invitation/models/index.js";
 import Membership from "../../../../modules/membership/models/index.js";
@@ -11,9 +12,8 @@ import Organization from "../../../../modules/organization/models/index.js";
 import User from "../../../../modules/user/models/index.js";
 import { ensureUserProfile } from "../../../../modules/user/services/index.js";
 import { sendOrganizationInvitationEmail } from "../../../../services/email/send-email.js";
-import { badRequest, conflict, internalError, notFound, tooManyRequests } from "../../../../utils/errors.js";
-import { findAuthAccount, normalizeTeamEmail, teamRoles } from "../../../../utils/organization-routes.js";
-import { getBody } from "../../../../utils/request-values.js";
+import { conflict, internalError, notFound, tooManyRequests } from "../../../../utils/errors.js";
+import { findAuthAccount, teamEmailSchema, teamRoles } from "../../../../utils/organization-routes.js";
 
 const router = Router({ mergeParams: true });
 
@@ -87,16 +87,19 @@ router.post(
   currentOrganizationBySlug,
   organizationAccess,
   authorize("membership.create"),
+  validate({
+    body: z.strictObject({
+      email: teamEmailSchema,
+      role: z.string({ error: "role must be ADMIN or MANAGER." })
+        .refine((role) => teamRoles.includes(role), {
+          message: "role must be ADMIN or MANAGER.",
+        }),
+    }, { error: "Only email and role can be provided." }),
+  }),
   async (req, res, next) => {
     try {
-      const body = getBody(req);
-      if (Object.keys(body).some((field) => field !== "email" && field !== "role")) {
-        throw badRequest("Only email and role can be provided.");
-      }
-      const email = normalizeTeamEmail(body.email);
-      if (typeof body.role !== "string" || !teamRoles.includes(body.role)) {
-        throw badRequest("role must be ADMIN or MANAGER.");
-      }
+      const body = req.body;
+      const email = body.email.trim().toLowerCase();
 
       const account = await findAuthAccount(email);
       if (account?.emailVerified) {

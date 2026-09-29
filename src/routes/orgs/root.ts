@@ -1,13 +1,14 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { authenticate } from "../../middlewares/index.js";
-import { ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
+import { z } from "zod";
+import { authenticate, validate } from "../../middlewares/index.js";
+import { ORGANIZATION_PRIMARY_COLORS, ORGANIZATION_ROLES } from "../../modules/_shared/constants.js";
 import Membership from "../../modules/membership/models/index.js";
 import Organization from "../../modules/organization/models/index.js";
 import User from "../../modules/user/models/index.js";
-import { badRequest, conflict, internalError } from "../../utils/errors.js";
-import { getPrimaryColor, toOrganizationResponse } from "../../utils/organization-routes.js";
-import { getBody, optionalHttpsUrl, requiredString } from "../../utils/request-values.js";
+import { conflict, internalError } from "../../utils/errors.js";
+import { httpsUrlSchema } from "../../utils/https-url-schema.js";
+import { primaryColorSchema, toOrganizationResponse } from "../../utils/organization-routes.js";
 
 const router = Router({ mergeParams: true });
 
@@ -106,29 +107,30 @@ router.get("/", authenticate, async (req, res, next) => {
 /**
  * POST /api/orgs
  */
-router.post("/", authenticate, async (req, res, next) => {
+router.post("/", authenticate, validate({
+  body: z.object({
+    name: z.string({ error: "name is required." }).trim()
+      .min(1, "name is required.")
+      .max(50, "name must be 50 characters or fewer."),
+    slug: z.string({ error: "slug is required." }).trim()
+      .min(1, "slug is required.")
+      .refine((value) => ORGANIZATION_SLUG_PATTERN.test(value.toLowerCase()), {
+        message: "slug must use lowercase letters, numbers, and single hyphens only.",
+      })
+      .refine((value) => value.length <= 20, {
+        message: "slug must be 20 characters or fewer.",
+      }),
+    primaryColor: primaryColorSchema.nullish(),
+    logo: httpsUrlSchema("logo").optional(),
+  }),
+}), async (req, res, next) => {
   const session = await mongoose.startSession();
 
   try {
-    const body = getBody(req);
-    const name = requiredString(body, "name");
-    const slug = requiredString(body, "slug").toLowerCase();
-    const primaryColor = getPrimaryColor(body);
-    const logo = optionalHttpsUrl(body, "logo");
-
-    if (name.length > 50) {
-      throw badRequest("name must be 50 characters or fewer.");
-    }
-
-    if (!ORGANIZATION_SLUG_PATTERN.test(slug)) {
-      throw badRequest(
-        "slug must use lowercase letters, numbers, and single hyphens only.",
-      );
-    }
-
-    if (slug.length > 20) {
-      throw badRequest("slug must be 20 characters or fewer.");
-    }
+    const name = req.body.name.trim();
+    const slug = req.body.slug.trim().toLowerCase();
+    const primaryColor = req.body.primaryColor ?? ORGANIZATION_PRIMARY_COLORS.BLUE;
+    const logo = req.body.logo?.trim();
 
     const organization = await session.withTransaction(async () => {
       const slugAlreadyInUse = await Organization.exists({ slug }).session(

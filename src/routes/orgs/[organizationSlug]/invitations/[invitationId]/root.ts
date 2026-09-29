@@ -1,8 +1,9 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "../../../../../middlewares/index.js";
+import { z } from "zod";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../../middlewares/index.js";
 import Invitation from "../../../../../modules/invitation/models/index.js";
-import { badRequest, notFound } from "../../../../../utils/errors.js";
+import { notFound } from "../../../../../utils/errors.js";
 
 const router = Router({ mergeParams: true });
 
@@ -15,12 +16,16 @@ router.delete(
   currentOrganizationBySlug,
   organizationAccess,
   authorize("membership.delete"),
+  validate({
+    params: z.object({
+      invitationId: z.string().refine(mongoose.isValidObjectId, {
+        message: "A valid invitation ID is required.",
+      }),
+    }),
+  }),
   async (req, res, next) => {
     try {
-      const { invitationId } = req.params;
-      if (typeof invitationId !== "string" || !mongoose.isValidObjectId(invitationId)) {
-        throw badRequest("A valid invitation ID is required.");
-      }
+      const invitationId = req.params.invitationId as string;
 
       const invitation = await Invitation.findOneAndUpdate(
         {

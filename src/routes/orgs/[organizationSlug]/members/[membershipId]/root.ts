@@ -1,12 +1,12 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "../../../../../middlewares/index.js";
+import { z } from "zod";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../../middlewares/index.js";
 import { ORGANIZATION_ROLES } from "../../../../../modules/_shared/constants.js";
 import Membership from "../../../../../modules/membership/models/index.js";
 import Organization from "../../../../../modules/organization/models/index.js";
-import { badRequest, conflict, notFound } from "../../../../../utils/errors.js";
+import { conflict, notFound } from "../../../../../utils/errors.js";
 import { teamRoles } from "../../../../../utils/organization-routes.js";
-import { getBody } from "../../../../../utils/request-values.js";
 
 const router = Router({ mergeParams: true });
 
@@ -45,18 +45,24 @@ router.put(
   currentOrganizationBySlug,
   organizationAccess,
   authorize("membership.update"),
+  validate({
+    params: z.object({
+      membershipId: z.string().refine(mongoose.isValidObjectId, {
+        message: "A valid membership ID is required.",
+      }),
+    }),
+    body: z.strictObject({
+      role: z.string({ error: "role must be ADMIN or MANAGER." })
+        .refine((role) => teamRoles.includes(role), {
+          message: "role must be ADMIN or MANAGER.",
+        }),
+    }, { error: "role must be ADMIN or MANAGER." }),
+  }),
   async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
-      const { membershipId } = req.params;
-      if (typeof membershipId !== "string" || !mongoose.isValidObjectId(membershipId)) {
-        throw badRequest("A valid membership ID is required.");
-      }
-
-      const body = getBody(req);
-      if (Object.keys(body).length !== 1 || !teamRoles.includes(body.role as string)) {
-        throw badRequest("role must be ADMIN or MANAGER.");
-      }
+      const membershipId = req.params.membershipId as string;
+      const body = req.body;
 
       const result = await session.withTransaction(async () => {
         await lockOrganizationMemberships(req.organizationAccess!.organizationId, session);
@@ -96,13 +102,17 @@ router.delete(
   currentOrganizationBySlug,
   organizationAccess,
   authorize("membership.delete"),
+  validate({
+    params: z.object({
+      membershipId: z.string().refine(mongoose.isValidObjectId, {
+        message: "A valid membership ID is required.",
+      }),
+    }),
+  }),
   async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
-      const { membershipId } = req.params;
-      if (typeof membershipId !== "string" || !mongoose.isValidObjectId(membershipId)) {
-        throw badRequest("A valid membership ID is required.");
-      }
+      const membershipId = req.params.membershipId as string;
 
       await session.withTransaction(async () => {
         await lockOrganizationMemberships(req.organizationAccess!.organizationId, session);

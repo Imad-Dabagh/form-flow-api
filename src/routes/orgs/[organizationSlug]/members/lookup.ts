@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "../../../../middlewares/index.js";
+import { z } from "zod";
+import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "../../../../middlewares/index.js";
 import Invitation from "../../../../modules/invitation/models/index.js";
 import Membership from "../../../../modules/membership/models/index.js";
 import User from "../../../../modules/user/models/index.js";
 import { tooManyRequests } from "../../../../utils/errors.js";
-import { findAuthAccount, normalizeTeamEmail } from "../../../../utils/organization-routes.js";
+import { findAuthAccount, teamEmailSchema } from "../../../../utils/organization-routes.js";
 
 const router = Router({ mergeParams: true });
 
@@ -30,9 +31,10 @@ router.get(
   currentOrganizationBySlug,
   organizationAccess,
   authorize("membership.read"),
+  validate({ query: z.object({ email: teamEmailSchema }) }),
   async (req, res, next) => {
     try {
-      const email = normalizeTeamEmail(req.query.email);
+      const email = (req.query.email as string).trim().toLowerCase();
       const account = await findAuthAccount(email);
       if (!account?.emailVerified) {
         const pending = await Invitation.findOne({

@@ -47,12 +47,16 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Invitation from "../src/modules/invitation/models/index.js";
+import Organization from "../src/modules/organization/models/index.js";
 
 const app = express();
 app.use(express.json());
 app.use("/api/orgs", organizationRoutes);
-app.use((error: { statusCode?: number; code?: string }, _req: unknown, res: express.Response, _next: unknown) => {
-  res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR" });
+app.use((error: { statusCode?: number; code?: string; message?: string }, _req: unknown, res: express.Response, _next: unknown) => {
+  res.status(error.statusCode ?? 500).json({
+    code: error.code ?? "INTERNAL_ERROR",
+    message: error.message,
+  });
 });
 
 let mongo: MongoMemoryServer;
@@ -81,6 +85,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await Invitation.deleteMany({});
+  await Organization.deleteMany({});
 });
 
 afterAll(async () => {
@@ -120,5 +125,43 @@ describe("organization invitation management", () => {
 
   it("rejects managers", async () => {
     await request(app).get("/api/orgs/manager/invitations").expect(403);
+  });
+});
+
+describe("organization request validation", () => {
+  it("keeps null primaryColor as the default blue on updates", async () => {
+    await Organization.create({ _id: organizationIds.alpha, name: "Alpha", slug: "alpha" });
+
+    const response = await request(app).put("/api/orgs/alpha")
+      .send({ primaryColor: null }).expect(200);
+
+    expect(response.body.data.primaryColor).toBe("blue");
+  });
+
+  it("keeps body, query, and path errors as bad requests", async () => {
+    const invalidSlug = await request(app).post("/api/orgs").send({ name: "Acme", slug: "bad_slug" }).expect(400);
+    expect(invalidSlug.body).toMatchObject({
+      code: "BAD_REQUEST",
+      message: "slug must use lowercase letters, numbers, and single hyphens only.",
+    });
+
+    const emptyUpdate = await request(app).put("/api/orgs/alpha").send({}).expect(400);
+    expect(emptyUpdate.body.message).toBe(
+      "Only name, logo, primaryColor, slogan, and shortDescription can be updated.",
+    );
+
+    const missingEmail = await request(app).get("/api/orgs/alpha/members/lookup").expect(400);
+    expect(missingEmail.body.message).toBe("A valid email is required.");
+
+    const invalidMemberId = await request(app).put("/api/orgs/alpha/members/not-an-id")
+      .send({ role: "ADMIN" }).expect(400);
+    expect(invalidMemberId.body.message).toBe("A valid membership ID is required.");
+
+    const invalidInvitationId = await request(app).delete("/api/orgs/alpha/invitations/not-an-id").expect(400);
+    expect(invalidInvitationId.body.message).toBe("A valid invitation ID is required.");
+  });
+
+  it("checks permissions before request schemas", async () => {
+    await request(app).delete("/api/orgs/manager/invitations/not-an-id").expect(403);
   });
 });

@@ -1,31 +1,28 @@
 import mongoose from "mongoose";
+import { z } from "zod";
 import {
   ORGANIZATION_PRIMARY_COLORS,
   ORGANIZATION_ROLES,
   type OrganizationPrimaryColor,
 } from "../modules/_shared/constants.js";
-import { badRequest, internalError } from "./errors.js";
+import { internalError } from "./errors.js";
 
 const organizationPrimaryColors = Object.values(ORGANIZATION_PRIMARY_COLORS);
 
 export const teamRoles = [ORGANIZATION_ROLES.ADMIN, ORGANIZATION_ROLES.MANAGER];
 
-export function getPrimaryColor(
-  body: Record<string, unknown>,
-): OrganizationPrimaryColor {
-  const value = body.primaryColor ?? ORGANIZATION_PRIMARY_COLORS.BLUE;
+const primaryColorError = `primaryColor must be one of: ${organizationPrimaryColors.join(", ")}.`;
 
-  if (
-    typeof value !== "string" ||
-    !organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
-  ) {
-    throw badRequest(
-      `primaryColor must be one of: ${organizationPrimaryColors.join(", ")}.`,
-    );
-  }
+export const primaryColorSchema = z.string({ error: primaryColorError })
+  .refine((value) => organizationPrimaryColors.includes(value as OrganizationPrimaryColor), {
+    message: primaryColorError,
+  });
 
-  return value as OrganizationPrimaryColor;
-}
+export const teamEmailSchema = z.string({ error: "A valid email is required." })
+  .refine((value) => {
+    const email = value.trim().toLowerCase();
+    return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }, { message: "A valid email is required." });
 
 function normalizePrimaryColor(value?: string): OrganizationPrimaryColor {
   return organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
@@ -51,15 +48,6 @@ export function toOrganizationResponse(organization: {
     slogan: organization.slogan ?? "",
     shortDescription: organization.shortDescription ?? "",
   };
-}
-
-export function normalizeTeamEmail(value: unknown): string {
-  if (typeof value !== "string") throw badRequest("A valid email is required.");
-  const email = value.trim().toLowerCase();
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw badRequest("A valid email is required.");
-  }
-  return email;
 }
 
 export async function findAuthAccount(email: string) {
