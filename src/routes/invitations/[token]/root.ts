@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../../../middlewares/index.js";
+import { z } from "zod";
+import { authenticate, validate } from "../../../middlewares/index.js";
 import Invitation from "../../../modules/invitation/models/index.js";
 import Organization from "../../../modules/organization/models/index.js";
 import { notFound, unauthorized } from "../../../utils/errors.js";
@@ -10,9 +11,14 @@ const router = Router({ mergeParams: true });
 /**
  * GET /api/invitations/:token
  */
-router.get("/", authenticate, async (req, res, next) => {
+router.get("/", authenticate, validate({
+  params: z.object({
+    token: z.string({ error: "A valid invitation link is required." })
+      .regex(/^[a-f0-9]{64}$/, "A valid invitation link is required."),
+  }),
+}), async (req, res, next) => {
   try {
-    const tokenHash = getTokenHash(req.params.token);
+    const tokenHash = getTokenHash(req.params.token as string);
     const invitation = await Invitation.findOne({
       tokenHash,
       status: "PENDING",
