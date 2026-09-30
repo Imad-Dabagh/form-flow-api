@@ -14,6 +14,7 @@ const formSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 100,
     },
     description: {
       type: String,
@@ -45,7 +46,7 @@ const formSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-formSchema.index({ organizationId: 1, archivedAt: 1 });
+formSchema.index({ organizationId: 1, archivedAt: 1, updatedAt: -1, _id: -1 });
 
 const Form = mongoose.models.Form ?? mongoose.model("Form", formSchema);
 
