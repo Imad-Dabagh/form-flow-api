@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import Invitation from "#app/modules/invitation/models/index";
 import Membership from "#app/modules/membership/models/index";
 import User from "#app/modules/user/models/index";
@@ -26,11 +26,8 @@ const memberLookupRateLimit = rateLimit({
  */
 router.get(
   "/",
-  authenticate,
-  memberLookupRateLimit,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.read"),
+  memberLookupRateLimit,
   validate({ query: z.object({ email: teamEmailSchema }) }),
   async (req, res, next) => {
     try {

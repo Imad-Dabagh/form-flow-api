@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
 import Membership from "#app/modules/membership/models/index";
 import Organization from "#app/modules/organization/models/index";
@@ -41,9 +41,6 @@ async function lockOrganizationMemberships(organizationId: string, session: mong
  */
 router.put(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.update"),
   validate({
     params: z.object({
@@ -98,9 +95,6 @@ router.put(
  */
 router.delete(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.delete"),
   validate({
     params: z.object({

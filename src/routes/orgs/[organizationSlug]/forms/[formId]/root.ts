@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import Form from "#app/modules/form/models/index";
 import { notFound } from "#app/utils/errors";
 
@@ -12,9 +12,6 @@ const router = Router({ mergeParams: true });
  */
 router.get(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("form.read"),
   validate({
     params: z.object({

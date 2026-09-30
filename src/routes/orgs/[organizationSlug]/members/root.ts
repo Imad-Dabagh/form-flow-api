@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import config from "#app/config/index";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
 import Invitation from "#app/modules/invitation/models/index";
 import Membership from "#app/modules/membership/models/index";
@@ -33,9 +33,6 @@ const memberAddRateLimit = rateLimit({
  */
 router.get(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.read"),
   async (req, res, next) => {
     try {
@@ -82,11 +79,8 @@ router.get(
  */
 router.post(
   "/",
-  authenticate,
-  memberAddRateLimit,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.create"),
+  memberAddRateLimit,
   validate({
     body: z.strictObject({
       email: teamEmailSchema,

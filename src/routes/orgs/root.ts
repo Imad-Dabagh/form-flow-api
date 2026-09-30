@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { authenticate, validate } from "#app/middlewares/index";
+import { validate } from "#app/middlewares/index";
 import { ORGANIZATION_PRIMARY_COLORS, ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
 import Membership from "#app/modules/membership/models/index";
 import Organization from "#app/modules/organization/models/index";
@@ -27,7 +27,7 @@ function activeOrganizationQuery() {
 /**
  * GET /api/orgs
  */
-router.get("/", authenticate, async (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     if (req.auth!.isSuperAdmin) {
       const [organizations, memberships] = await Promise.all([
@@ -107,7 +107,7 @@ router.get("/", authenticate, async (req, res, next) => {
 /**
  * POST /api/orgs
  */
-router.post("/", authenticate, validate({
+router.post("/", validate({
   body: z.object({
     name: z.string({ error: "name is required." }).trim()
       .min(1, "name is required.")

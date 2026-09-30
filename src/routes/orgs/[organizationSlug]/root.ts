@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import { ORGANIZATION_PRIMARY_COLORS } from "#app/modules/_shared/constants";
 import Organization from "#app/modules/organization/models/index";
 import { notFound } from "#app/utils/errors";
@@ -14,9 +14,6 @@ const router = Router({ mergeParams: true });
  */
 router.put(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("organization.update"),
   validate({
     body: z.strictObject({

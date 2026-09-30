@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess, validate } from "#app/middlewares/index";
+import { authorize, validate } from "#app/middlewares/index";
 import Form from "#app/modules/form/models/index";
 
 const router = Router({ mergeParams: true });
@@ -11,9 +11,6 @@ const PAGE_SIZE = 20;
  */
 router.get(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("form.read"),
   validate({
     query: z.object({
@@ -68,9 +65,6 @@ router.get(
  */
 router.post(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("form.create"),
   validate({
     body: z.strictObject({

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize, currentOrganizationBySlug, organizationAccess } from "#app/middlewares/index";
+import { authorize } from "#app/middlewares/index";
 import Invitation from "#app/modules/invitation/models/index";
 
 const router = Router({ mergeParams: true });
@@ -9,9 +9,6 @@ const router = Router({ mergeParams: true });
  */
 router.get(
   "/",
-  authenticate,
-  currentOrganizationBySlug,
-  organizationAccess,
   authorize("membership.read"),
   async (req, res, next) => {
     try {
