@@ -10,6 +10,7 @@ import healthRoutes from "#app/routes/health/index";
 import invitationRoutes from "#app/routes/invitations/index";
 import meRoutes from "#app/routes/me/index";
 import organizationRoutes from "#app/routes/orgs/index";
+import publicRoutes from "#app/routes/public/index";
 import uploadRoutes from "#app/routes/upload/index";
 
 export default function expressLoader(app: Express, auth: Auth): void {
@@ -26,6 +27,7 @@ export default function expressLoader(app: Express, auth: Auth): void {
 
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+  app.use("/api/public", publicRoutes);
   app.use(createAttachSession(auth));
 
   app.use("/health", healthRoutes);
