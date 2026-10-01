@@ -18,8 +18,8 @@ function formResponse(form: any) {
     type: form.type ?? "AUTHENTICATED",
     description: form.description,
     sections: form.sections,
-    displayMode: form.displayMode,
-    isClosed: form.isClosed,
+    displayMode: form.displayMode ?? "SINGLE_PAGE",
+    isClosed: form.isClosed ?? false,
     createdAt: form.createdAt,
     updatedAt: form.updatedAt,
   };

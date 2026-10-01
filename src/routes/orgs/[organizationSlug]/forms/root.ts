@@ -33,7 +33,7 @@ router.get(
       };
       const [forms, total] = await Promise.all([
         Form.find(scope)
-          .select("name type createdAt updatedAt")
+          .select("name type displayMode isClosed createdAt updatedAt")
           .sort({ updatedAt: -1, _id: -1 })
           .skip((page - 1) * PAGE_SIZE)
           .limit(PAGE_SIZE)
@@ -48,6 +48,8 @@ router.get(
             id: String(form._id),
             name: form.name,
             type: form.type ?? "AUTHENTICATED",
+            displayMode: form.displayMode ?? "SINGLE_PAGE",
+            isClosed: form.isClosed ?? false,
             createdAt: form.createdAt,
             updatedAt: form.updatedAt,
           })),
@@ -74,6 +76,8 @@ router.post(
         .min(1, "name is required.")
         .max(100, "name must be 100 characters or fewer."),
       type: z.enum(FORM_TYPES),
+      displayMode: z.enum(["SINGLE_PAGE", "WIZARD"]),
+      isClosed: z.boolean(),
     }),
   }),
   async (req, res, next) => {
@@ -83,6 +87,8 @@ router.post(
         createdBy: req.auth!.userId,
         name: req.body.name.trim(),
         type: req.body.type,
+        displayMode: req.body.displayMode,
+        isClosed: req.body.isClosed,
       });
 
       return res.status(201).json({
@@ -91,6 +97,8 @@ router.post(
           id: String(form._id),
           name: form.name,
           type: form.type,
+          displayMode: form.displayMode,
+          isClosed: form.isClosed,
           createdAt: form.createdAt,
           updatedAt: form.updatedAt,
         },

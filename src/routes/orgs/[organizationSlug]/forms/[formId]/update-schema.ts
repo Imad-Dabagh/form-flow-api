@@ -96,11 +96,8 @@ const sectionSchema = z.strictObject({
 });
 
 export const updateFormSchema = z.strictObject({
-  name: nonEmpty.max(100),
   description: z.string(),
   sections: z.array(sectionSchema),
-  displayMode: z.enum(["SINGLE_PAGE", "WIZARD"]),
-  isClosed: z.boolean(),
 }).superRefine((body, context) => {
   const sectionIds = new Set<string>();
   const questionIds = new Set<string>();
