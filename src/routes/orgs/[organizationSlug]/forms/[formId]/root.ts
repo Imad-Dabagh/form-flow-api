@@ -15,6 +15,7 @@ function formResponse(form: any) {
   return {
     id: String(form._id),
     name: form.name,
+    type: form.type ?? "AUTHENTICATED",
     description: form.description,
     sections: form.sections,
     displayMode: form.displayMode,
@@ -42,7 +43,7 @@ router.get(
         organizationId: req.organizationAccess!.organizationId,
         archivedAt: null,
       })
-        .select("name description sections displayMode isClosed createdAt updatedAt")
+        .select("name type description sections displayMode isClosed createdAt updatedAt")
         .lean();
       if (!form) throw notFound("Form");
 
@@ -76,7 +77,7 @@ router.put(
         },
         { $set: req.body },
         { new: true, runValidators: true },
-      ).select("name description sections displayMode isClosed createdAt updatedAt");
+      ).select("name type description sections displayMode isClosed createdAt updatedAt");
       if (!form) throw notFound("Form");
 
       return res.status(200).json({ success: true, data: formResponse(form) });

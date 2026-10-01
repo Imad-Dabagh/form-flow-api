@@ -18,5 +18,8 @@ export const ORGANIZATION_PRIMARY_COLORS = {
   SKY: "sky",
 } as const;
 
+export const FORM_TYPES = ["PUBLIC", "AUTHENTICATED"] as const;
+
 export type OrganizationPrimaryColor =
   (typeof ORGANIZATION_PRIMARY_COLORS)[keyof typeof ORGANIZATION_PRIMARY_COLORS];
+export type FormType = (typeof FORM_TYPES)[number];

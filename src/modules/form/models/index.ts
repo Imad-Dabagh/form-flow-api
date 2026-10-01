@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { SUB_DOCUMENTS } from "#app/modules/_shared/index";
+import { FORM_TYPES } from "#app/modules/_shared/constants";
 
 const { FormSectionSchema } = SUB_DOCUMENTS;
 
@@ -15,6 +16,12 @@ const formSchema = new mongoose.Schema(
       required: true,
       trim: true,
       maxlength: 100,
+    },
+    type: {
+      type: String,
+      enum: FORM_TYPES,
+      required: true,
+      default: "AUTHENTICATED",
     },
     description: {
       type: String,

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
+import { FORM_TYPES } from "#app/modules/_shared/constants";
 import Form from "#app/modules/form/models/index";
 
 const router = Router({ mergeParams: true });
@@ -32,7 +33,7 @@ router.get(
       };
       const [forms, total] = await Promise.all([
         Form.find(scope)
-          .select("name createdAt updatedAt")
+          .select("name type createdAt updatedAt")
           .sort({ updatedAt: -1, _id: -1 })
           .skip((page - 1) * PAGE_SIZE)
           .limit(PAGE_SIZE)
@@ -46,6 +47,7 @@ router.get(
           items: forms.map((form) => ({
             id: String(form._id),
             name: form.name,
+            type: form.type ?? "AUTHENTICATED",
             createdAt: form.createdAt,
             updatedAt: form.updatedAt,
           })),
@@ -71,7 +73,8 @@ router.post(
       name: z.string({ error: "name is required." }).trim()
         .min(1, "name is required.")
         .max(100, "name must be 100 characters or fewer."),
-    }, { error: "Only name can be provided." }),
+      type: z.enum(FORM_TYPES),
+    }),
   }),
   async (req, res, next) => {
     try {
@@ -79,6 +82,7 @@ router.post(
         organizationId: req.organizationAccess!.organizationId,
         createdBy: req.auth!.userId,
         name: req.body.name.trim(),
+        type: req.body.type,
       });
 
       return res.status(201).json({
@@ -86,6 +90,7 @@ router.post(
         data: {
           id: String(form._id),
           name: form.name,
+          type: form.type,
           createdAt: form.createdAt,
           updatedAt: form.updatedAt,
         },
