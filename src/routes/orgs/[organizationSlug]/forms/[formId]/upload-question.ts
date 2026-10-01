@@ -5,7 +5,7 @@ import { authorize, validate } from "#app/middlewares/index";
 import { authenticatedUploadRateLimit } from "#app/modules/file-upload/authenticated-rate-limit";
 import Form from "#app/modules/form/models/index";
 import { uploadQuestionFile } from "#app/modules/form/services/upload-question-file";
-import { notFound } from "#app/utils/errors";
+import { badRequest, notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 
@@ -22,6 +22,9 @@ router.post(
   }),
   async (req, res, next) => {
     try {
+      const questionId = req.params.questionId;
+      if (typeof questionId !== "string") throw badRequest("A valid question ID is required.");
+
       const form = await Form.findOne({
         _id: req.params.formId,
         organizationId: req.organizationAccess!.organizationId,
@@ -29,7 +32,7 @@ router.post(
       }).select("organizationId isClosed sections").lean();
       if (!form) throw notFound("Form");
 
-      const file = await uploadQuestionFile({ request: req, form, questionId: req.params.questionId });
+      const file = await uploadQuestionFile({ request: req, form, questionId });
       return res.status(201).json({ success: true, data: file });
     } catch (error) {
       return next(error);
