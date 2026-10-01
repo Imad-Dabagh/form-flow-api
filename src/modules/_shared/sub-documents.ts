@@ -1,49 +1,57 @@
 import mongoose from "mongoose";
+import { UPLOAD_CATEGORIES } from "#app/modules/file-upload/policy";
 
 export const FORM_FIELD_TYPES = [
   "string",
   "text",
-  "number",
   "email",
-  "file",
-  "datetime",
-  "countries",
+  "number",
   "select",
   "radio",
   "multi-select",
   "checkboxes",
   "boolean",
+  "datetime",
+  "countries",
+  "file",
   "linear-scale",
 ] as const;
 
-export const FormFieldSchema = new mongoose.Schema(
+const FormOptionSchema = new mongoose.Schema(
   {
-    id: { type: String, required: true, trim: true },
-    inputType: { type: String, required: true, enum: FORM_FIELD_TYPES },
-    label: { type: String, required: true, trim: true },
+    label: { type: String, required: true },
+    value: { type: String, required: true },
+    isCorrectAnswer: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
+
+export const FormQuestionSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true },
+    title: { type: String, required: true },
     description: { type: String, default: "" },
     placeholder: { type: String, default: "" },
-    required: { type: Boolean, default: false },
+    inputType: { type: String, required: true, enum: FORM_FIELD_TYPES },
+    isRequired: { type: Boolean, default: false },
+    options: { type: [FormOptionSchema], default: undefined },
     typeConfig: {
-      type: { type: String },
-      format: { type: String },
-      min: { type: Number, default: 1 },
-      max: { type: Number, default: 5 },
-      minLabel: { type: String, default: "" },
-      maxLabel: { type: String, default: "" },
+      type: String,
+      format: String,
+      min: Number,
+      max: Number,
+      minLabel: String,
+      maxLabel: String,
+      uploadCategory: { type: String, enum: UPLOAD_CATEGORIES },
+      allowedExtensions: { type: [String], default: undefined },
     },
-    options: [
-      {
-        label: String,
-        value: String,
-      },
-    ],
     validation: {
       minLength: Number,
       maxLength: Number,
       min: Number,
       max: Number,
-      pattern: String,
+      regex: String,
     },
     defaultValue: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
@@ -52,10 +60,11 @@ export const FormFieldSchema = new mongoose.Schema(
 
 export const FormSectionSchema = new mongoose.Schema(
   {
-    id: { type: String, required: true, trim: true },
-    title: { type: String, default: "", trim: true },
+    _id: { type: String, required: true },
+    title: { type: String, required: true },
     description: { type: String, default: "" },
-    fields: { type: [FormFieldSchema], default: [] },
+    isHidden: { type: Boolean, default: false },
+    questions: { type: [FormQuestionSchema], default: [] },
   },
   { _id: false },
 );
