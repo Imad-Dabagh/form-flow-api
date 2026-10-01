@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { validate } from "#app/middlewares/index";
 import FormSubmission from "#app/modules/form-submission/models/index";
-import { validateFormAnswers } from "#app/modules/form-submission/validate-form-answers";
+import { receiveSubmission } from "#app/modules/form-submission/receive-submission";
 import Form from "#app/modules/form/models/index";
 import { conflict, notFound, tooManyRequests } from "#app/utils/errors";
 
@@ -28,9 +28,6 @@ router.put(
     params: z.object({
       formId: z.string().refine(mongoose.isValidObjectId, "A valid form ID is required."),
     }),
-    body: z.strictObject({
-      formAnswers: z.record(z.string(), z.unknown()),
-    }),
   }),
   async (req, res, next) => {
     try {
@@ -42,13 +39,13 @@ router.put(
       if (!form) throw notFound("Form");
       if (form.isClosed) throw conflict("This form is closed.");
 
-      const answers = validateFormAnswers(form.sections, req.body.formAnswers);
-      const submission = await FormSubmission.create({
-        organizationId: form.organizationId,
-        formId: form._id,
-        formName: form.name,
-        answers,
-      });
+      const submission = await receiveSubmission(req, form.sections, String(form.organizationId),
+        (answers) => FormSubmission.create({
+          organizationId: form.organizationId,
+          formId: form._id,
+          formName: form.name,
+          answers,
+        }));
 
       return res.status(201).json({
         success: true,

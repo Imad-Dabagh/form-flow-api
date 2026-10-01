@@ -1,5 +1,6 @@
 import busboy from "busboy";
 import type { Request } from "express";
+import type { Readable } from "node:stream";
 import { badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
 import type {
   StorageProvider,
@@ -15,6 +16,27 @@ export interface ReceiveFileOptions {
   tenantId: string;
   storage: StorageProvider;
   policy?: FormQuestionUploadPolicy;
+}
+
+export async function storeFileStream(
+  source: Readable & { truncated?: boolean },
+  { tenantId, storage, policy, originalName, declaredMimeType, signal }: ReceiveFileOptions & {
+    originalName: string;
+    declaredMimeType: string;
+    signal?: AbortSignal;
+  },
+): Promise<StoredFileMetadata> {
+  const prepared = await prepareUploadStream(source, originalName, declaredMimeType, policy);
+  const fileName = createStoredFileName(originalName, prepared.detectedExtension);
+
+  return storage.upload({
+    stream: prepared.stream,
+    tenantId,
+    fileName,
+    originalName,
+    mimeType: prepared.mimeType,
+    signal,
+  });
 }
 
 export async function receiveFileUpload(
@@ -73,27 +95,14 @@ export async function receiveFileUpload(
         return;
       }
 
-      uploadTask = (async () => {
-        const prepared = await prepareUploadStream(
-          file,
-          info.filename,
-          info.mimeType,
-          policy,
-        );
-        const fileName = createStoredFileName(
-          info.filename,
-          prepared.detectedExtension,
-        );
-
-        return storage.upload({
-          stream: prepared.stream,
-          tenantId,
-          fileName,
-          originalName: info.filename,
-          mimeType: prepared.mimeType,
-          signal: abortController.signal,
-        });
-      })();
+      uploadTask = storeFileStream(file, {
+        tenantId,
+        storage,
+        policy,
+        originalName: info.filename,
+        declaredMimeType: info.mimeType,
+        signal: abortController.signal,
+      });
 
       // Attach a handler immediately; the task is awaited after parsing ends.
       void uploadTask.catch(() => undefined);

@@ -76,6 +76,14 @@ function toStoredFile(
 }
 
 class CloudinaryStorageProvider implements StorageProvider {
+  async delete(file: StoredFileMetadata): Promise<void> {
+    await cloudinary.uploader.destroy(file.storageKey, {
+      resource_type: getResourceType(file.mimeType),
+      type: "authenticated",
+      invalidate: true,
+    });
+  }
+
   async upload(input: StorageUploadInput): Promise<StoredFileMetadata> {
     const resourceType = getResourceType(input.mimeType);
     const publicFileName =

@@ -1,14 +1,22 @@
 import { z } from "zod";
 import { badRequest } from "#app/utils/errors";
+import type { StoredFileMetadata } from "#app/services/storage/index";
+import type { UploadCategory } from "#app/modules/file-upload/policy";
 
-interface Question {
+export interface SubmissionQuestion {
   _id: string;
   name: string;
   title: string;
   inputType: string;
   isRequired?: boolean;
   options?: Array<{ value: string; label: string }>;
-  typeConfig?: { type?: string; min?: number; max?: number };
+  typeConfig?: {
+    type?: string;
+    min?: number;
+    max?: number;
+    uploadCategory?: UploadCategory;
+    allowedExtensions?: string[];
+  };
   validation?: {
     minLength?: number;
     maxLength?: number;
@@ -18,11 +26,11 @@ interface Question {
   };
 }
 
-interface Section {
+export interface SubmissionSection {
   _id: string;
   title: string;
   isHidden?: boolean;
-  questions: Question[];
+  questions: SubmissionQuestion[];
 }
 
 export interface ValidatedAnswer {
@@ -32,20 +40,22 @@ export interface ValidatedAnswer {
   questionName: string;
   questionTitle: string;
   inputType: string;
-  value: string | number | boolean | string[];
+  value: string | number | boolean | string[] | StoredFileMetadata[];
   selectedOptions?: Array<{ value: string; label: string }>;
 }
+
+type NonFileAnswer = string | number | boolean | string[];
 
 const textTypes = new Set(["string", "text", "email", "countries"]);
 const singleChoiceTypes = new Set(["select", "radio"]);
 const multipleChoiceTypes = new Set(["multi-select", "checkboxes"]);
 const emailSchema = z.email();
 
-function invalid(question: Question, message: string): never {
+function invalid(question: SubmissionQuestion, message: string): never {
   throw badRequest(`${question.title}: ${message}`, { questionId: question._id });
 }
 
-function validateValue(question: Question, value: unknown): ValidatedAnswer["value"] {
+function validateValue(question: SubmissionQuestion, value: unknown): NonFileAnswer {
   const { inputType, validation } = question;
 
   if (textTypes.has(inputType)) {
@@ -132,8 +142,10 @@ function validateValue(question: Question, value: unknown): ValidatedAnswer["val
 
 /** Accept only answers to visible questions, in the form's current order. */
 export function validateFormAnswers(
-  sections: Section[],
+  sections: SubmissionSection[],
   formAnswers: Record<string, unknown>,
+  uploadedFiles: Record<string, StoredFileMetadata[]> = {},
+  allowMissingFiles = false,
 ): ValidatedAnswer[] {
   const visibleSections = sections.filter((section) => !section.isHidden);
   const questions = visibleSections.flatMap((section) => section.questions);
@@ -147,6 +159,26 @@ export function validateFormAnswers(
   const answers: ValidatedAnswer[] = [];
   for (const section of visibleSections) {
     for (const question of section.questions) {
+      if (question.inputType === "file") {
+        if (Object.prototype.hasOwnProperty.call(formAnswers, question._id)) {
+          invalid(question, "Send files as uploads, not answer values.");
+        }
+        const files = uploadedFiles[question._id] ?? [];
+        if (!files.length) {
+          if (question.isRequired && !allowMissingFiles) invalid(question, "An answer is required.");
+          continue;
+        }
+        answers.push({
+          sectionId: section._id,
+          sectionTitle: section.title,
+          questionId: question._id,
+          questionName: question.name,
+          questionTitle: question.title,
+          inputType: question.inputType,
+          value: files,
+        });
+        continue;
+      }
       const rawValue = Object.prototype.hasOwnProperty.call(formAnswers, question._id)
         ? formAnswers[question._id]
         : undefined;
@@ -160,10 +192,6 @@ export function validateFormAnswers(
       if (question.inputType === "boolean" && question.isRequired && rawValue !== true) {
         invalid(question, "This must be checked.");
       }
-      if (question.inputType === "file") {
-        invalid(question, "File answers are not available yet.");
-      }
-
       const value = validateValue(question, rawValue);
       const selectedValues = Array.isArray(value)
         ? value

@@ -27,4 +27,5 @@ export interface StoredFileMetadata {
 
 export interface StorageProvider {
   upload(input: StorageUploadInput): Promise<StoredFileMetadata>;
+  delete(file: StoredFileMetadata): Promise<void>;
 }
