@@ -7,17 +7,19 @@ import type {
 } from "#app/services/storage/index";
 import { createStoredFileName } from "./file-name.js";
 import { MAX_UPLOAD_BYTES, prepareUploadStream } from "./validation.js";
+import type { FormQuestionUploadPolicy } from "./policy.js";
 
 const MAX_MULTIPART_OVERHEAD_BYTES = 256 * 1024;
 
 export interface ReceiveFileOptions {
   tenantId: string;
   storage: StorageProvider;
+  policy?: FormQuestionUploadPolicy;
 }
 
 export async function receiveFileUpload(
   req: Request,
-  { tenantId, storage }: ReceiveFileOptions,
+  { tenantId, storage, policy }: ReceiveFileOptions,
 ): Promise<StoredFileMetadata> {
   const contentType = req.headers["content-type"] ?? "";
 
@@ -76,6 +78,7 @@ export async function receiveFileUpload(
           file,
           info.filename,
           info.mimeType,
+          policy,
         );
         const fileName = createStoredFileName(
           info.filename,

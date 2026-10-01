@@ -1,21 +1,10 @@
 import { Router } from "express";
-import { rateLimit } from "express-rate-limit";
 import { authenticate, resolveUploadTenant } from "#app/middlewares/index";
 import { receiveFileUpload } from "#app/modules/file-upload/index";
+import { authenticatedUploadRateLimit } from "#app/modules/file-upload/authenticated-rate-limit";
 import { storageProvider } from "#app/services/index";
-import { tooManyRequests } from "#app/utils/errors";
 
 const router = Router();
-const uploadRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 20,
-  identifier: "file-upload",
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  keyGenerator: (req) => req.auth!.userId,
-  handler: (_req, _res, next) =>
-    next(tooManyRequests("Upload limit reached. Try again later.")),
-});
 
 /**
  * POST /api/upload
@@ -23,7 +12,7 @@ const uploadRateLimit = rateLimit({
 router.post(
   "/",
   authenticate,
-  uploadRateLimit,
+  authenticatedUploadRateLimit,
   resolveUploadTenant,
   async (req, res, next) => {
     try {

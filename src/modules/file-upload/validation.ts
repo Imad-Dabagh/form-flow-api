@@ -6,6 +6,12 @@ import {
   unsupportedMediaType,
 } from "#app/utils/errors";
 import { getFileExtension } from "./file-name.js";
+import {
+  isUploadExtensionInCategory,
+  normalizeUploadExtension,
+  UPLOAD_MIME_TYPES,
+  type FormQuestionUploadPolicy,
+} from "./policy.js";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const INSPECTION_BYTES = 8 * 1024;
@@ -109,6 +115,7 @@ export async function prepareUploadStream(
   source: Readable & { truncated?: boolean },
   originalName: string,
   declaredMimeType: string,
+  policy?: FormQuestionUploadPolicy,
 ): Promise<PreparedUpload> {
   const extension = getFileExtension(originalName);
   const normalizedDeclaredMimeType = normalizeMimeType(declaredMimeType);
@@ -121,6 +128,10 @@ export async function prepareUploadStream(
   try {
     assertAllowedExtension(extension);
     assertAllowedMimeType(normalizedDeclaredMimeType);
+    if (policy && (!isUploadExtensionInCategory(policy.category, extension) ||
+      (policy.allowedExtensions.length > 0 && !policy.allowedExtensions.includes(normalizeUploadExtension(extension))))) {
+      throw unsupportedMediaType("This file extension is not allowed for this question.");
+    }
   } catch (error) {
     source.resume();
     throw error;
@@ -131,7 +142,7 @@ export async function prepareUploadStream(
   let inspectedBytes = 0;
   let inputEnded = false;
 
-  while (inspectedBytes < INSPECTION_BYTES) {
+  while (inspectedBytes < (policy ? 256 * 1024 : INSPECTION_BYTES)) {
     const next = await iterator.next();
 
     if (next.done) {
@@ -153,12 +164,27 @@ export async function prepareUploadStream(
     throw badRequest("The uploaded file is empty.");
   }
 
-  const detectedType = await fileTypeFromBuffer(prefix);
+  let detectedType: Awaited<ReturnType<typeof fileTypeFromBuffer>>;
+  try {
+    detectedType = await fileTypeFromBuffer(prefix);
+  } catch (error) {
+    if (!policy) throw error;
+    void drain(iterator);
+    throw unsupportedMediaType("This file type could not be verified.");
+  }
 
   try {
     if (detectedType) {
       assertAllowedMimeType(detectedType.mime);
       assertAllowedExtension(detectedType.ext);
+    }
+    if (policy) {
+      const normalizedExtension = normalizeUploadExtension(extension);
+      const detectedExtension = detectedType && normalizeUploadExtension(detectedType.ext);
+      if (!detectedType || detectedExtension !== normalizedExtension ||
+        detectedType.mime !== UPLOAD_MIME_TYPES[normalizedExtension]) {
+        throw unsupportedMediaType("The file content does not match its allowed extension.");
+      }
     }
   } catch (error) {
     void drain(iterator);
