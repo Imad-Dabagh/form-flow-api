@@ -8,11 +8,12 @@ import { notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 
-/** GET /api/public/forms/:formId */
+/** GET /api/orgs/:organizationSlug/forms/:formId/response */
 router.get(
   "/",
   validate({
     params: z.object({
+      organizationSlug: z.string(),
       formId: z.string().refine(mongoose.isValidObjectId, "A valid form ID is required."),
     }),
   }),
@@ -20,7 +21,8 @@ router.get(
     try {
       const form = await Form.findOne({
         _id: req.params.formId,
-        type: "PUBLIC",
+        organizationId: req.organizationAccess!.organizationId,
+        type: { $in: ["AUTHENTICATED", null] },
         archivedAt: null,
       }).select("name type description sections displayMode isClosed").lean();
       if (!form) throw notFound("Form");

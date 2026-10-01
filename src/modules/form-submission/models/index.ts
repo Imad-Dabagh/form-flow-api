@@ -16,12 +16,18 @@ const formSubmissionSchema = new mongoose.Schema(
       required: true,
     },
     formName: { type: String, required: true },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     answers: { type: [FormSubmissionAnswerSchema], required: true },
   },
   { timestamps: true },
 );
 
 formSubmissionSchema.index({ formId: 1, createdAt: -1, _id: -1 });
+formSubmissionSchema.index({ formId: 1, submittedBy: 1, createdAt: -1 });
 formSubmissionSchema.index({ organizationId: 1, createdAt: -1, _id: -1 });
 
 const FormSubmission = mongoose.models.FormSubmission
