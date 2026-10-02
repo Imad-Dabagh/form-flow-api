@@ -12,7 +12,7 @@ import { getFileExtension } from "#app/modules/file-upload/file-name";
 import { isUploadExtensionInCategory, normalizeUploadExtension, type FormQuestionUploadPolicy } from "#app/modules/file-upload/policy";
 import { MAX_UPLOAD_BYTES } from "#app/modules/file-upload/validation";
 import { storageProvider, type StoredFileMetadata } from "#app/services/storage/index";
-import { badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
+import { AppError, badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
 import { validateFormAnswers, type SubmissionSection, type ValidatedAnswer } from "./validate-form-answers.js";
 
 const MAX_FILES = 10;
@@ -139,7 +139,13 @@ export async function receiveSubmission<T>(
     const pendingUploads = files.map((file) => {
       const question = questions.get(file.questionId);
       if (!question) throw badRequest("A file does not belong to a visible file question.", { questionId: file.questionId });
-      if (file.truncated) throw payloadTooLarge(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
+      if (file.truncated) {
+        throw new AppError(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`, {
+          statusCode: 413,
+          code: "PAYLOAD_TOO_LARGE",
+          details: { questionId: file.questionId },
+        });
+      }
       const category = question.typeConfig?.uploadCategory ?? "all";
       const policy: FormQuestionUploadPolicy = {
         category,
@@ -160,13 +166,25 @@ export async function receiveSubmission<T>(
 
     const uploaded: Record<string, StoredFileMetadata[]> = {};
     for (const { file, policy } of pendingUploads) {
-      const metadata = await storeFileStream(createReadStream(file.filePath), {
-        tenantId: `organization-${organizationId}`,
-        storage: storageProvider,
-        policy,
-        originalName: file.originalName,
-        declaredMimeType: file.mimeType,
-      });
+      let metadata: StoredFileMetadata;
+      try {
+        metadata = await storeFileStream(createReadStream(file.filePath), {
+          tenantId: `organization-${organizationId}`,
+          storage: storageProvider,
+          policy,
+          originalName: file.originalName,
+          declaredMimeType: file.mimeType,
+        });
+      } catch (error) {
+        if (error instanceof AppError && [400, 413, 415].includes(error.statusCode)) {
+          throw new AppError(error.message, {
+            statusCode: error.statusCode,
+            code: error.code,
+            details: { questionId: file.questionId },
+          });
+        }
+        throw error;
+      }
       storedFiles.push(metadata);
       (uploaded[file.questionId] ??= []).push(metadata);
     }
