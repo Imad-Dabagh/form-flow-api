@@ -22,7 +22,6 @@ export interface SubmissionQuestion {
     maxLength?: number;
     min?: number;
     max?: number;
-    regex?: string;
   };
 }
 
@@ -60,9 +59,6 @@ function validateValue(question: SubmissionQuestion, value: unknown): NonFileAns
 
   if (textTypes.has(inputType)) {
     if (typeof value !== "string") invalid(question, "Enter valid text.");
-    if (validation?.regex) {
-      invalid(question, "Custom text validation is not available yet.");
-    }
     if (validation?.minLength !== undefined && value.length < validation.minLength) {
       invalid(question, `Enter at least ${validation.minLength} characters.`);
     }

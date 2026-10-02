@@ -51,7 +51,6 @@ export const FormQuestionSchema = new mongoose.Schema(
       maxLength: Number,
       min: Number,
       max: Number,
-      regex: String,
     },
     defaultValue: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },

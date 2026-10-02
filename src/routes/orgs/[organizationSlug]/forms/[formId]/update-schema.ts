@@ -39,7 +39,6 @@ const questionSchema = z.strictObject({
     maxLength: z.number().int().nonnegative().optional(),
     min: z.number().optional(),
     max: z.number().optional(),
-    regex: z.string().optional(),
   }).optional(),
   defaultValue: z.unknown().optional(),
 }).superRefine((question, context) => {
