@@ -70,7 +70,12 @@ afterAll(async () => {
 describe("organization forms", () => {
   it("creates a blank form in the current organization", async () => {
     const response = await request(app).post("/api/orgs/alpha/forms")
-      .send({ name: "  Customer feedback  " }).expect(201);
+      .send({
+        name: "  Customer feedback  ",
+        type: "PUBLIC",
+        displayMode: "SINGLE_PAGE",
+        isClosed: false,
+      }).expect(201);
 
     expect(response.body.data).toMatchObject({ name: "Customer feedback" });
     const form = await Form.findById(response.body.data.id);
