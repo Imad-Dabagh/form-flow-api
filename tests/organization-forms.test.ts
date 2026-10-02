@@ -44,6 +44,7 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
+import User from "../src/modules/user/models/index.js";
 
 const app = express();
 app.use(express.json());
@@ -62,6 +63,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await FormSubmission.deleteMany({});
   await Form.deleteMany({});
+  await User.deleteMany({});
 });
 
 afterAll(async () => {
@@ -145,13 +147,94 @@ describe("organization forms", () => {
     });
 
     const response = await request(app).get(`/api/orgs/alpha/forms/${own.id}/submissions`).expect(200);
-    expect(response.body.data.items).toEqual([{
-      id: String(submission._id),
-      submittedAt: submission.createdAt.toISOString(),
-    }]);
+    expect(response.body.data).toMatchObject({
+      items: [{
+        id: String(submission._id),
+        submittedAt: submission.createdAt.toISOString(),
+        respondent: { kind: "anonymous" },
+        answers: [],
+      }],
+      nextCursor: null,
+    });
     await request(app).get(`/api/orgs/alpha/forms/${other.id}/submissions`).expect(404);
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}/submissions`).expect(404);
     await request(app).get(`/api/orgs/member/forms/${own.id}/submissions`).expect(403);
     await request(app).get("/api/orgs/alpha/forms/not-an-id/submissions").expect(400);
+  });
+
+  it("paginates submissions in stable newest-first order", async () => {
+    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const submittedAt = new Date("2026-01-01T12:00:00.000Z");
+    await FormSubmission.insertMany(Array.from({ length: 22 }, (_, index) => ({
+      organizationId: alphaId,
+      formId: form.id,
+      formName: form.name,
+      idempotencyKey: `page-${index}`,
+      answers: [],
+      createdAt: submittedAt,
+    })));
+
+    const first = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
+    expect(first.body.data.items).toHaveLength(20);
+    expect(first.body.data.nextCursor).toEqual(expect.any(String));
+    const second = await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .query({ cursor: first.body.data.nextCursor }).expect(200);
+    expect(second.body.data.items).toHaveLength(2);
+    expect(second.body.data.nextCursor).toBeNull();
+    expect(new Set([...first.body.data.items, ...second.body.data.items]
+      .map((item: { id: string }) => item.id)).size).toBe(22);
+    await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .query({ cursor: "invalid" }).expect(400);
+  });
+
+  it("returns answer snapshots and limited respondent data without internal fields", async () => {
+    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const respondent = await User.create({
+      email: "reader@example.com",
+      authUserId: "auth-reader",
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
+    await FormSubmission.create({
+      organizationId: alphaId,
+      formId: form.id,
+      formName: form.name,
+      submittedBy: respondent.id,
+      idempotencyKey: "private-key",
+      answers: [{
+        sectionId: "old-section",
+        sectionTitle: "Earlier section",
+        questionId: "old-question",
+        questionName: "earlier_upload",
+        questionTitle: "Earlier upload",
+        inputType: "file",
+        value: [{
+          id: "asset-id",
+          storageKey: "private-storage-key",
+          provider: "cloudinary",
+          url: "https://example.com/file.pdf",
+          name: "stored.pdf",
+          originalName: "answer.pdf",
+          extension: "pdf",
+          mimeType: "application/pdf",
+          size: 123,
+          createdAt: "2026-01-01T12:00:00.000Z",
+        }],
+      }],
+    });
+
+    const response = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
+    expect(response.body.data.items[0]).toMatchObject({
+      respondent: { kind: "user", name: "Ada Lovelace", email: "reader@example.com" },
+      answers: [{
+        sectionTitle: "Earlier section",
+        questionTitle: "Earlier upload",
+        value: [{ name: "answer.pdf", url: "https://example.com/file.pdf", size: 123 }],
+      }],
+    });
+    expect(JSON.stringify(response.body.data)).not.toContain("private-key");
+    expect(JSON.stringify(response.body.data)).not.toContain("private-storage-key");
+    expect(JSON.stringify(response.body.data)).not.toContain("auth-reader");
   });
 });
