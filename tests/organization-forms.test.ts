@@ -43,6 +43,7 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Form from "../src/modules/form/models/index.js";
+import FormSubmission from "../src/modules/form-submission/models/index.js";
 
 const app = express();
 app.use(express.json());
@@ -59,6 +60,7 @@ beforeAll(async () => {
 }, 120_000);
 
 beforeEach(async () => {
+  await FormSubmission.deleteMany({});
   await Form.deleteMany({});
 });
 
@@ -128,5 +130,28 @@ describe("organization forms", () => {
     await request(app).get("/api/orgs/alpha/forms/not-an-id").expect(400);
     await request(app).post("/api/orgs/member/forms").send({ name: " " }).expect(403);
     await request(app).get("/api/orgs/member/forms/not-an-id").expect(403);
+  });
+
+  it("lists submissions only for an accessible active form", async () => {
+    const own = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Own" });
+    const other = await Form.create({ organizationId: betaId, createdBy: userId, name: "Other" });
+    const archived = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Archived", archivedAt: new Date() });
+    const submission = await FormSubmission.create({
+      organizationId: alphaId,
+      formId: own.id,
+      formName: own.name,
+      idempotencyKey: "step-one-submission",
+      answers: [],
+    });
+
+    const response = await request(app).get(`/api/orgs/alpha/forms/${own.id}/submissions`).expect(200);
+    expect(response.body.data.items).toEqual([{
+      id: String(submission._id),
+      submittedAt: submission.createdAt.toISOString(),
+    }]);
+    await request(app).get(`/api/orgs/alpha/forms/${other.id}/submissions`).expect(404);
+    await request(app).get(`/api/orgs/alpha/forms/${archived.id}/submissions`).expect(404);
+    await request(app).get(`/api/orgs/member/forms/${own.id}/submissions`).expect(403);
+    await request(app).get("/api/orgs/alpha/forms/not-an-id/submissions").expect(400);
   });
 });
