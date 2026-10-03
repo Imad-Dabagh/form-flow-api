@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "imports": {
     "#app/*": {
+      "types": "./src/*.ts",
       "development": "./src/*.ts",
       "default": "./dist/*.js"
     }
