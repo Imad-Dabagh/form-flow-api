@@ -44,6 +44,7 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
+import Membership from "../src/modules/membership/models/index.js";
 import User from "../src/modules/user/models/index.js";
 
 const app = express();
@@ -63,6 +64,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await FormSubmission.deleteMany({});
   await Form.deleteMany({});
+  await Membership.deleteMany({});
   await User.deleteMany({});
 });
 
@@ -125,6 +127,37 @@ describe("organization forms", () => {
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}`).expect(404);
   });
 
+  it("grants authenticated submission access and hides answer keys from the form", async () => {
+    const form = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Quiz",
+      type: "AUTHENTICATED",
+      sections: [{
+        _id: "section-1",
+        title: "Quiz",
+        questions: [{
+          _id: "question-1",
+          name: "secret_name",
+          title: "Choose one",
+          inputType: "radio",
+          options: [{ label: "A", value: "a", isCorrectAnswer: true }],
+        }],
+      }],
+    });
+    const path = `/api/orgs/alpha/forms/${form.id}/submission`;
+
+    await request(app).put(`${path}/access`).expect(200);
+    expect(await Membership.exists({ organizationId: alphaId, userId })).toBeTruthy();
+    const formForSubmission = await request(app).get(path).expect(200);
+    expect(formForSubmission.body.data).toMatchObject({
+      name: "Quiz",
+      sections: [{ questions: [{ title: "Choose one", options: [{ label: "A", value: "a" }] }] }],
+    });
+    expect(JSON.stringify(formForSubmission.body.data)).not.toContain("isCorrectAnswer");
+    expect(JSON.stringify(formForSubmission.body.data)).not.toContain("secret_name");
+  });
+
   it("validates input and checks permission before schemas", async () => {
     await request(app).post("/api/orgs/alpha/forms").send({ name: " " }).expect(400);
     await request(app).post("/api/orgs/alpha/forms").send({ name: "Good", isClosed: false }).expect(400);
@@ -142,7 +175,14 @@ describe("organization forms", () => {
       organizationId: alphaId,
       formId: own.id,
       formName: own.name,
-      idempotencyKey: "step-one-submission",
+      submittedAt: new Date(),
+      answers: [],
+    });
+    await FormSubmission.create({
+      organizationId: alphaId,
+      formId: own.id,
+      formName: own.name,
+      submittedAt: null,
       answers: [],
     });
 
@@ -150,8 +190,8 @@ describe("organization forms", () => {
     expect(response.body.data).toMatchObject({
       items: [{
         id: String(submission._id),
-        submittedAt: submission.createdAt.toISOString(),
-        respondent: { kind: "anonymous" },
+        submittedAt: submission.submittedAt?.toISOString(),
+        submittedBy: { kind: "anonymous" },
         answers: [],
       }],
       nextCursor: null,
@@ -169,9 +209,9 @@ describe("organization forms", () => {
       organizationId: alphaId,
       formId: form.id,
       formName: form.name,
-      idempotencyKey: `page-${index}`,
       answers: [],
       createdAt: submittedAt,
+      submittedAt,
     })));
 
     const first = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
@@ -188,20 +228,21 @@ describe("organization forms", () => {
       .query({ cursor: "invalid" }).expect(400);
   });
 
-  it("returns answer snapshots and limited respondent data without internal fields", async () => {
+  it("returns answer snapshots and limited user data without internal fields", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
-    const respondent = await User.create({
+    const user = await User.create({
       email: "reader@example.com",
       authUserId: "auth-reader",
       firstName: "Ada",
       lastName: "Lovelace",
+      profilePic: "https://example.com/ada.jpg",
     });
     await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
       formName: form.name,
-      submittedBy: respondent.id,
-      idempotencyKey: "private-key",
+      submittedBy: user.id,
+      submittedAt: new Date(),
       answers: [{
         sectionId: "old-section",
         sectionTitle: "Earlier section",
@@ -226,7 +267,12 @@ describe("organization forms", () => {
 
     const response = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
     expect(response.body.data.items[0]).toMatchObject({
-      respondent: { kind: "user", name: "Ada Lovelace", email: "reader@example.com" },
+      submittedBy: {
+        kind: "user",
+        name: "Ada Lovelace",
+        email: "reader@example.com",
+        profilePic: "https://example.com/ada.jpg",
+      },
       answers: [{
         sectionTitle: "Earlier section",
         questionTitle: "Earlier upload",
