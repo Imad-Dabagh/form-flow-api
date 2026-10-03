@@ -36,7 +36,7 @@ export const FormQuestionSchema = new mongoose.Schema(
     inputType: { type: String, required: true, enum: FORM_FIELD_TYPES },
     isRequired: { type: Boolean, default: false },
     options: { type: [FormOptionSchema], default: undefined },
-    typeConfig: {
+    typeConfig: new mongoose.Schema({
       type: String,
       format: String,
       min: Number,
@@ -45,7 +45,7 @@ export const FormQuestionSchema = new mongoose.Schema(
       maxLabel: String,
       uploadCategory: { type: String, enum: UPLOAD_CATEGORIES },
       allowedExtensions: { type: [String], default: undefined },
-    },
+    }, { _id: false }),
     validation: {
       minLength: Number,
       maxLength: Number,
