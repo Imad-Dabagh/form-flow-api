@@ -109,7 +109,7 @@ async function receiveMultipart(req: Request, directory: string): Promise<{ answ
   return { answers: parseAnswers(parsed), files };
 }
 
-/** Validate answers against the saved form, store files, and save the response. */
+/** Validate answers against the saved form, store files, and save the submission. */
 export async function receiveSubmission<T>(
   req: Request,
   sections: SubmissionSection[],

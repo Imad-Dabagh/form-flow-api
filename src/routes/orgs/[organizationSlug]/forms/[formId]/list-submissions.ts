@@ -27,9 +27,10 @@ function decodeCursor(value: string) {
   }
 }
 
-function encodeCursor(submission: { _id: mongoose.Types.ObjectId; createdAt: Date }) {
+function encodeCursor(submission: { _id: mongoose.Types.ObjectId; submittedAt?: Date | null }) {
+  if (!submission.submittedAt) throw new Error("A completed submission needs submittedAt.");
   return Buffer.from(JSON.stringify({
-    submittedAt: submission.createdAt.toISOString(),
+    submittedAt: submission.submittedAt.toISOString(),
     id: String(submission._id),
   })).toString("base64url");
 }
@@ -44,7 +45,7 @@ interface StoredAnswer {
   selectedOptions?: Array<{ value: string; label: string }>;
 }
 
-function toAnswerResponse(answer: StoredAnswer) {
+function toAnswerData(answer: StoredAnswer) {
   const value = answer.inputType === "file" && Array.isArray(answer.value)
     ? answer.value.filter((file): file is StoredFileMetadata =>
       typeof file === "object" && file !== null && typeof file.url === "string")
@@ -87,48 +88,53 @@ router.get(
       const form = await Form.exists({ _id: formId, organizationId, archivedAt: null });
       if (!form) throw notFound("Form");
       const cursor = typeof req.query.cursor === "string" ? decodeCursor(req.query.cursor) : null;
-      const scope = { formId, organizationId };
+      const scope = { formId, organizationId, submittedAt: { $ne: null } };
       const olderThanCursor = cursor ? {
         $or: [
-          { createdAt: { $lt: cursor.submittedAt } },
-          { createdAt: cursor.submittedAt, _id: { $lt: cursor.id } },
+          { submittedAt: { $lt: cursor.submittedAt } },
+          { submittedAt: cursor.submittedAt, _id: { $lt: cursor.id } },
         ],
       } : {};
 
       const submissions = await FormSubmission.find({ ...scope, ...olderThanCursor })
-        .select("_id createdAt submittedBy answers")
-        .sort({ createdAt: -1, _id: -1 })
+        .select("_id submittedAt submittedBy answers")
+        .sort({ submittedAt: -1, _id: -1 })
         .limit(PAGE_SIZE + 1)
         .lean();
       const page = submissions.slice(0, PAGE_SIZE);
-      const respondentIds = page.flatMap((submission) =>
+      const userIds = page.flatMap((submission) =>
         submission.submittedBy ? [submission.submittedBy] : []);
-      const respondents = respondentIds.length
-        ? await User.find({ _id: { $in: respondentIds } })
-          .select("_id firstName lastName email")
+      const users = userIds.length
+        ? await User.find({ _id: { $in: userIds } })
+          .select("_id firstName lastName email profilePic")
           .lean()
         : [];
-      const respondentsById = new Map(respondents.map((user) => [String(user._id), user]));
+      const usersById = new Map(users.map((user) => [String(user._id), user]));
 
       return res.status(200).json({
         success: true,
         data: {
           items: page.map((submission) => {
-            const respondent = submission.submittedBy
-              ? respondentsById.get(String(submission.submittedBy)) : null;
-            const name = respondent
-              ? [respondent.firstName, respondent.lastName].filter(Boolean).join(" ")
+            const user = submission.submittedBy
+              ? usersById.get(String(submission.submittedBy)) : null;
+            const name = user
+              ? [user.firstName, user.lastName].filter(Boolean).join(" ")
               : "";
 
             return {
               id: String(submission._id),
-              submittedAt: submission.createdAt,
-              respondent: !submission.submittedBy
+              submittedAt: submission.submittedAt,
+              submittedBy: !submission.submittedBy
                 ? { kind: "anonymous" }
-                : respondent
-                  ? { kind: "user", name: name || respondent.email, email: respondent.email }
+                : user
+                  ? {
+                    kind: "user",
+                    name: name || user.email,
+                    email: user.email,
+                    profilePic: user.profilePic || null,
+                  }
                   : { kind: "former-user" },
-              answers: submission.answers.map(toAnswerResponse),
+              answers: submission.answers.map(toAnswerData),
             };
           }),
           nextCursor: submissions.length > PAGE_SIZE && page.length

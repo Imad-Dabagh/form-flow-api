@@ -19,7 +19,7 @@ interface UploadableForm {
   }>;
 }
 
-/** Form access is resolved by the caller, so this also works for public respondents later. */
+/** Form access is resolved by the caller, so this can also serve public submissions. */
 export async function uploadQuestionFile({ request, form, questionId }: {
   request: Request;
   form: UploadableForm;

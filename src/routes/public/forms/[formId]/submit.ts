@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { validate } from "#app/middlewares/index";
-import { submitIdempotently } from "#app/modules/form-submission/submit-idempotently";
+import { submitIdempotently } from "#app/modules/form-submission/services/index";
 import Form from "#app/modules/form/models/index";
 import { notFound, tooManyRequests } from "#app/utils/errors";
 
@@ -42,7 +42,7 @@ router.put(
         success: true,
         data: {
           id: String(submission._id),
-          submittedAt: submission.createdAt,
+          submittedAt: submission.submittedAt,
         },
       });
     } catch (error) {

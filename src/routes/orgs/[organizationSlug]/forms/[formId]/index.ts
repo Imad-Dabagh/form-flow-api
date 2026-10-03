@@ -1,18 +1,14 @@
 import { Router } from "express";
 import rootRoutes from "./root.js";
-import responseRoutes from "./response.js";
-import settingsRoutes from "./settings.js";
-import submitRoutes from "./submit.js";
-import submissionsRoutes from "./submissions.js";
-import uploadQuestionRoutes from "./upload-question.js";
+import formSubmissionRoutes from "./form-submission.js";
+import draftRoutes from "./drafts.js";
+import listSubmissionsRoutes from "./list-submissions.js";
 
 const router = Router({ mergeParams: true });
 
 router.use("/", rootRoutes);
-router.use("/response", responseRoutes);
-router.use("/submissions/submit", submitRoutes);
-router.use("/submissions", submissionsRoutes);
-router.use("/settings", settingsRoutes);
-router.use("/questions/:questionId/uploads", uploadQuestionRoutes);
+router.use("/", formSubmissionRoutes);
+router.use("/submissions/drafts", draftRoutes);
+router.use("/submissions", listSubmissionsRoutes);
 
 export default router;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticate, currentOrganizationBySlug, organizationAccess } from "#app/middlewares/index";
 import organizationRoutes from "./[organizationSlug]/index.js";
-import responseAccessRoutes from "./[organizationSlug]/forms/[formId]/response-access.js";
+import { submissionAccessRoutes } from "./[organizationSlug]/forms/[formId]/form-submission.js";
 import rootRoutes from "./root.js";
 
 const router = Router();
@@ -9,9 +9,9 @@ const router = Router();
 router.use(authenticate);
 router.use("/", rootRoutes);
 router.use(
-  "/:organizationSlug/forms/:formId/response/access",
+  "/:organizationSlug/forms/:formId/submission/access",
   currentOrganizationBySlug,
-  responseAccessRoutes,
+  submissionAccessRoutes,
 );
 router.use(
   "/:organizationSlug",

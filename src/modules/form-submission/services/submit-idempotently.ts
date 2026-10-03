@@ -2,7 +2,7 @@ import type { Request } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { AppError, badRequest } from "#app/utils/errors";
-import FormSubmission from "./models/index.js";
+import FormSubmission from "../models/index.js";
 import { receiveSubmission } from "./receive-submission.js";
 import type { SubmissionSection } from "./validate-form-answers.js";
 
@@ -34,7 +34,8 @@ export async function submitIdempotently(
     idempotencyKey,
     submittedBy: submittedBy ?? null,
   };
-  const existing = await FormSubmission.findOne(query).select("_id createdAt").lean();
+  const existing = await FormSubmission.findOne({ ...query, submittedAt: { $ne: null } })
+    .select("_id submittedAt").lean();
   if (existing) return { submission: existing, replayed: true };
   if (form.isClosed) {
     throw new AppError("This form is closed.", { statusCode: 409, code: "FORM_CLOSED" });
@@ -51,13 +52,15 @@ export async function submitIdempotently(
         formName: form.name,
         submittedBy: submittedBy ?? null,
         idempotencyKey,
+        submittedAt: new Date(),
         answers,
       }),
     );
     return { submission, replayed: false };
   } catch (error) {
     if (isDuplicateKey(error)) {
-      const submitted = await FormSubmission.findOne(query).select("_id createdAt").lean();
+      const submitted = await FormSubmission.findOne({ ...query, submittedAt: { $ne: null } })
+        .select("_id submittedAt").lean();
       if (submitted) return { submission: submitted, replayed: true };
     }
     throw error;
