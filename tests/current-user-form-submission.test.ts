@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
 import Membership from "../src/modules/membership/models/index.js";
+import User from "../src/modules/user/models/index.js";
 import meRoutes from "../src/routes/me/index.js";
 import { storageProvider } from "../src/services/storage/index.js";
 
@@ -37,6 +38,11 @@ beforeEach(async () => {
     Form.deleteMany({}),
     FormSubmission.deleteMany({}),
     Membership.deleteMany({}),
+    User.deleteMany({}),
+  ]);
+  await User.create([
+    { _id: userId, authUserId: "auth-user", email: "member@example.com", firstName: "Amina", lastName: "Karim", phone: "+212 600 000 000" },
+    { _id: otherUserId, authUserId: "auth-other", email: "other@example.com", firstName: "Other" },
   ]);
 });
 
@@ -81,6 +87,8 @@ describe("current user's form submission", () => {
     });
     expect(second.body.data.submission.id).toBe(first.body.data.submission.id);
     expect(await FormSubmission.countDocuments({ formId: form.id, submittedBy: userId })).toBe(1);
+    expect((await FormSubmission.findOne({ formId: form.id, submittedBy: userId }).lean())?.searchKeywords)
+      .toBe("Amina Karim member@example.com +212 600 000 000");
     expect(await Membership.findOne({ userId, organizationId }).lean()).toMatchObject({ role: "USER" });
   });
 

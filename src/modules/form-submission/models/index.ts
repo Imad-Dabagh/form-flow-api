@@ -19,6 +19,7 @@ const formSubmissionSchema = new mongoose.Schema(
     },
     idempotencyKey: { type: String },
     submittedAt: { type: Date, default: null },
+    searchKeywords: { type: String },
     answers: { type: mongoose.Schema.Types.Mixed, required: true, default: () => ({}) },
   },
   { timestamps: true, minimize: false },

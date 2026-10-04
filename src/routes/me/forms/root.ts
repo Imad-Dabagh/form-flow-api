@@ -12,6 +12,7 @@ import FormSubmission from "#app/modules/form-submission/models/index";
 import { uploadQuestionFile } from "#app/modules/form-submission/services/upload-question-file";
 import { validateFormAnswers, type SubmissionSection } from "#app/modules/form-submission/services/validate-form-answers";
 import Membership from "#app/modules/membership/models/index";
+import User from "#app/modules/user/models/index";
 import { Logger } from "#app/services/index";
 import { storageProvider, type StoredFileMetadata } from "#app/services/storage/index";
 import { AppError, badRequest, conflict, notFound, tooManyRequests } from "#app/utils/errors";
@@ -43,6 +44,9 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
   try {
     const form = await findForm(req.params.formId);
     const userId = req.auth!.userId;
+    const user = await User.findById(userId).select("firstName lastName email phone").lean();
+    if (!user) throw notFound("User");
+    const searchKeywords = generateKeywords(user);
     let submission = await FormSubmission.findOne({ formId: form._id, submittedBy: userId }).lean() as Submission | null;
 
     if (!submission) {
@@ -53,11 +57,15 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
           organizationId: form.organizationId,
           answers: {},
           submittedAt: null,
+          searchKeywords,
         } },
         { upsert: true, returnDocument: "after", runValidators: true },
       ).lean() as Submission | null;
     }
     if (!submission) throw notFound("Submission");
+    if (submission.searchKeywords !== searchKeywords) {
+      await FormSubmission.updateOne({ _id: submission._id }, { $set: { searchKeywords } });
+    }
 
     await Membership.updateOne(
       { userId, organizationId: form.organizationId },
@@ -221,8 +229,21 @@ type Submission = {
   _id: mongoose.Types.ObjectId;
   submittedAt: Date | null;
   updatedAt: Date;
+  searchKeywords?: string;
   answers: Record<string, unknown>;
 };
+
+function generateKeywords(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  return [user.firstName, user.lastName, user.email, user.phone]
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .join(" ")
+    .substring(0, 99);
+}
 
 async function findForm(formId: string) {
   const form = await Form.findOne({
