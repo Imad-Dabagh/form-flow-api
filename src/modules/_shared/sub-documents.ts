@@ -5,6 +5,7 @@ export const FORM_FIELD_TYPES = [
   "string",
   "text",
   "email",
+  "url",
   "number",
   "select",
   "radio",

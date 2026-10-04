@@ -141,4 +141,29 @@ describe("direct form submissions", () => {
     const record = await FormSubmission.findById(submitted.body.data.id).lean();
     expect(record?.answers.count).toBe(0);
   });
+
+  it("accepts an absolute website URL and rejects other schemes or incomplete links", async () => {
+    const form = await Form.create({
+      organizationId,
+      createdBy: userId,
+      name: "Portfolio",
+      type: "PUBLIC",
+      sections: [{
+        _id: "section-1",
+        title: "Links",
+        questions: [{ _id: "website", title: "Portfolio URL", inputType: "url", isRequired: true }],
+      }],
+    });
+    const endpoint = `/api/public/forms/${form.id}/submissions/submit`;
+
+    for (const website of ["example.com", "javascript:alert(1)", "ftp://example.com"]) {
+      await request(app).put(endpoint).set("Idempotency-Key", randomUUID())
+        .send({ formAnswers: { website } }).expect(400);
+    }
+
+    const submitted = await request(app).put(endpoint).set("Idempotency-Key", randomUUID())
+      .send({ formAnswers: { website: " https://example.com/portfolio " } }).expect(201);
+    const record = await FormSubmission.findById(submitted.body.data.id).lean();
+    expect(record?.answers.website).toBe("https://example.com/portfolio");
+  });
 });

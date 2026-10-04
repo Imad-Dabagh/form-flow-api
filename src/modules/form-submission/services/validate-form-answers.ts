@@ -34,7 +34,7 @@ export interface SubmissionSection {
 type NonFileAnswer = string | number | boolean | string[];
 export type ValidatedAnswers = Record<string, NonFileAnswer | StoredFileMetadata[]>;
 
-const textTypes = new Set(["string", "text", "email", "countries"]);
+const textTypes = new Set(["string", "text", "email", "url", "countries"]);
 const singleChoiceTypes = new Set(["select", "radio"]);
 const multipleChoiceTypes = new Set(["multi-select", "checkboxes"]);
 const emailSchema = z.email();
@@ -56,6 +56,17 @@ function validateValue(question: SubmissionQuestion, value: unknown): NonFileAns
     }
     if (inputType === "email" && !emailSchema.safeParse(value).success) {
       invalid(question, "Enter a valid email address.");
+    }
+    if (inputType === "url") {
+      try {
+        const url = new URL(value.trim());
+        if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
+          invalid(question, "Enter a valid http or https URL.");
+        }
+      } catch {
+        invalid(question, "Enter a valid http or https URL.");
+      }
+      return value.trim();
     }
     return value;
   }
