@@ -138,6 +138,36 @@ router.put(
   },
 );
 
+/** PUT /api/orgs/:organizationSlug/forms/:formId/archive */
+router.put(
+  "/archive",
+  authorize("form.update"),
+  validate({
+    params: z.object({ formId: formIdSchema }),
+    body: z.strictObject({ archived: z.boolean() }),
+  }),
+  async (req, res, next) => {
+    try {
+      const form = await Form.findOneAndUpdate(
+        {
+          _id: req.params.formId,
+          organizationId: req.organizationAccess!.organizationId,
+        },
+        { $set: { archivedAt: req.body.archived ? new Date() : null } },
+        { new: true },
+      ).select("_id archivedAt");
+      if (!form) throw notFound("Form");
+
+      return res.status(200).json({
+        success: true,
+        data: { id: String(form._id), archivedAt: form.archivedAt },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
 /** POST /api/orgs/:organizationSlug/forms/:formId/questions/:questionId/uploads */
 router.post(
   "/questions/:questionId/uploads",
