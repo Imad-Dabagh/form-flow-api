@@ -1,7 +1,4 @@
 import mongoose from "mongoose";
-import { SUB_DOCUMENTS } from "#app/modules/_shared/index";
-
-const { FormSubmissionAnswerSchema } = SUB_DOCUMENTS;
 
 const formSubmissionSchema = new mongoose.Schema(
   {
@@ -15,7 +12,6 @@ const formSubmissionSchema = new mongoose.Schema(
       ref: "Form",
       required: true,
     },
-    formName: { type: String, required: true },
     submittedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -23,20 +19,15 @@ const formSubmissionSchema = new mongoose.Schema(
     },
     idempotencyKey: { type: String },
     submittedAt: { type: Date, default: null },
-    answers: { type: [FormSubmissionAnswerSchema], required: true },
+    answers: { type: mongoose.Schema.Types.Mixed, required: true, default: () => ({}) },
   },
-  { timestamps: true },
+  { timestamps: true, minimize: false },
 );
 
 formSubmissionSchema.index({ formId: 1, submittedAt: -1, _id: -1 });
-formSubmissionSchema.index({ formId: 1, submittedBy: 1, createdAt: -1 });
-formSubmissionSchema.index({ organizationId: 1, createdAt: -1, _id: -1 });
 formSubmissionSchema.index({ formId: 1, submittedBy: 1 }, {
   unique: true,
-  partialFilterExpression: {
-    submittedBy: { $type: "objectId" },
-    submittedAt: { $type: "null" },
-  },
+  partialFilterExpression: { submittedBy: { $type: "objectId" } },
 });
 formSubmissionSchema.index({ formId: 1, idempotencyKey: 1 }, {
   unique: true,

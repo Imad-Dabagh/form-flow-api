@@ -44,7 +44,6 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
-import Membership from "../src/modules/membership/models/index.js";
 import User from "../src/modules/user/models/index.js";
 
 const app = express();
@@ -64,7 +63,6 @@ beforeAll(async () => {
 beforeEach(async () => {
   await FormSubmission.deleteMany({});
   await Form.deleteMany({});
-  await Membership.deleteMany({});
   await User.deleteMany({});
 });
 
@@ -127,37 +125,6 @@ describe("organization forms", () => {
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}`).expect(404);
   });
 
-  it("grants authenticated submission access and hides answer keys from the form", async () => {
-    const form = await Form.create({
-      organizationId: alphaId,
-      createdBy: userId,
-      name: "Quiz",
-      type: "AUTHENTICATED",
-      sections: [{
-        _id: "section-1",
-        title: "Quiz",
-        questions: [{
-          _id: "question-1",
-          name: "secret_name",
-          title: "Choose one",
-          inputType: "radio",
-          options: [{ label: "A", value: "a", isCorrectAnswer: true }],
-        }],
-      }],
-    });
-    const path = `/api/orgs/alpha/forms/${form.id}/submission`;
-
-    await request(app).put(`${path}/access`).expect(200);
-    expect(await Membership.exists({ organizationId: alphaId, userId })).toBeTruthy();
-    const formForSubmission = await request(app).get(path).expect(200);
-    expect(formForSubmission.body.data).toMatchObject({
-      name: "Quiz",
-      sections: [{ questions: [{ title: "Choose one", options: [{ label: "A", value: "a" }] }] }],
-    });
-    expect(JSON.stringify(formForSubmission.body.data)).not.toContain("isCorrectAnswer");
-    expect(JSON.stringify(formForSubmission.body.data)).not.toContain("secret_name");
-  });
-
   it("validates input and checks permission before schemas", async () => {
     await request(app).post("/api/orgs/alpha/forms").send({ name: " " }).expect(400);
     await request(app).post("/api/orgs/alpha/forms").send({ name: "Good", isClosed: false }).expect(400);
@@ -174,16 +141,14 @@ describe("organization forms", () => {
     const submission = await FormSubmission.create({
       organizationId: alphaId,
       formId: own.id,
-      formName: own.name,
       submittedAt: new Date(),
-      answers: [],
+      answers: {},
     });
     await FormSubmission.create({
       organizationId: alphaId,
       formId: own.id,
-      formName: own.name,
       submittedAt: null,
-      answers: [],
+      answers: {},
     });
 
     const response = await request(app).get(`/api/orgs/alpha/forms/${own.id}/submissions`).expect(200);
@@ -192,7 +157,7 @@ describe("organization forms", () => {
         id: String(submission._id),
         submittedAt: submission.submittedAt?.toISOString(),
         submittedBy: { kind: "anonymous" },
-        answers: [],
+        answers: {},
       }],
       nextCursor: null,
     });
@@ -208,8 +173,7 @@ describe("organization forms", () => {
     await FormSubmission.insertMany(Array.from({ length: 22 }, (_, index) => ({
       organizationId: alphaId,
       formId: form.id,
-      formName: form.name,
-      answers: [],
+      answers: {},
       createdAt: submittedAt,
       submittedAt,
     })));
@@ -228,7 +192,7 @@ describe("organization forms", () => {
       .query({ cursor: "invalid" }).expect(400);
   });
 
-  it("returns answer snapshots and limited user data without internal fields", async () => {
+  it("returns answers and limited user data without internal fields", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
     const user = await User.create({
       email: "reader@example.com",
@@ -240,17 +204,10 @@ describe("organization forms", () => {
     await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
-      formName: form.name,
       submittedBy: user.id,
       submittedAt: new Date(),
-      answers: [{
-        sectionId: "old-section",
-        sectionTitle: "Earlier section",
-        questionId: "old-question",
-        questionName: "earlier_upload",
-        questionTitle: "Earlier upload",
-        inputType: "file",
-        value: [{
+      answers: {
+        "file-1": [{
           id: "asset-id",
           storageKey: "private-storage-key",
           provider: "cloudinary",
@@ -262,7 +219,7 @@ describe("organization forms", () => {
           size: 123,
           createdAt: "2026-01-01T12:00:00.000Z",
         }],
-      }],
+      },
     });
 
     const response = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
@@ -273,11 +230,7 @@ describe("organization forms", () => {
         email: "reader@example.com",
         profilePic: "https://example.com/ada.jpg",
       },
-      answers: [{
-        sectionTitle: "Earlier section",
-        questionTitle: "Earlier upload",
-        value: [{ name: "answer.pdf", url: "https://example.com/file.pdf", size: 123 }],
-      }],
+      answers: { "file-1": [{ name: "answer.pdf", url: "https://example.com/file.pdf", size: 123 }] },
     });
     expect(JSON.stringify(response.body.data)).not.toContain("private-key");
     expect(JSON.stringify(response.body.data)).not.toContain("private-storage-key");

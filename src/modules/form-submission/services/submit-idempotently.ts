@@ -9,7 +9,6 @@ import type { SubmissionSection } from "./validate-form-answers.js";
 interface SubmissionForm {
   _id: mongoose.Types.ObjectId;
   organizationId: mongoose.Types.ObjectId;
-  name: string;
   sections: SubmissionSection[];
   isClosed?: boolean;
 }
@@ -22,7 +21,6 @@ function isDuplicateKey(error: unknown): boolean {
 export async function submitIdempotently(
   req: Request,
   form: SubmissionForm,
-  submittedBy?: string,
 ) {
   const idempotencyKey = req.get("Idempotency-Key");
   if (!idempotencyKey || !z.uuid().safeParse(idempotencyKey).success) {
@@ -32,7 +30,6 @@ export async function submitIdempotently(
   const query = {
     formId: form._id,
     idempotencyKey,
-    submittedBy: submittedBy ?? null,
   };
   const existing = await FormSubmission.findOne({ ...query, submittedAt: { $ne: null } })
     .select("_id submittedAt").lean();
@@ -49,8 +46,7 @@ export async function submitIdempotently(
       (answers) => FormSubmission.create({
         organizationId: form.organizationId,
         formId: form._id,
-        formName: form.name,
-        submittedBy: submittedBy ?? null,
+        submittedBy: null,
         idempotencyKey,
         submittedAt: new Date(),
         answers,

@@ -18,61 +18,6 @@ const cursorSchema = z.strictObject({
   id: z.string().refine(mongoose.isValidObjectId),
 });
 
-function decodeCursor(value: string) {
-  try {
-    const parsed = cursorSchema.parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
-    return { submittedAt: new Date(parsed.submittedAt), id: new mongoose.Types.ObjectId(parsed.id) };
-  } catch {
-    throw badRequest("A valid submissions cursor is required.");
-  }
-}
-
-function encodeCursor(submission: { _id: mongoose.Types.ObjectId; submittedAt?: Date | null }) {
-  if (!submission.submittedAt) throw new Error("A completed submission needs submittedAt.");
-  return Buffer.from(JSON.stringify({
-    submittedAt: submission.submittedAt.toISOString(),
-    id: String(submission._id),
-  })).toString("base64url");
-}
-
-interface StoredAnswer {
-  sectionId: string;
-  sectionTitle: string;
-  questionId: string;
-  questionTitle: string;
-  inputType: string;
-  value: unknown;
-  selectedOptions?: Array<{ value: string; label: string }>;
-}
-
-function toAnswerData(answer: StoredAnswer) {
-  const value = answer.inputType === "file" && Array.isArray(answer.value)
-    ? answer.value.filter((file): file is StoredFileMetadata =>
-      typeof file === "object" && file !== null && typeof file.url === "string")
-      .map((file) => ({
-        name: file.originalName ?? file.name,
-        url: file.url,
-        mimeType: file.mimeType,
-        size: file.size,
-      }))
-    : answer.value;
-
-  return {
-    sectionId: answer.sectionId,
-    sectionTitle: answer.sectionTitle,
-    questionId: answer.questionId,
-    questionTitle: answer.questionTitle,
-    inputType: answer.inputType,
-    value,
-    ...(answer.selectedOptions?.length ? {
-      selectedOptions: answer.selectedOptions.map((option) => ({
-        value: option.value,
-        label: option.label,
-      })),
-    } : {}),
-  };
-}
-
 /** GET /api/orgs/:organizationSlug/forms/:formId/submissions */
 router.get(
   "/",
@@ -134,7 +79,7 @@ router.get(
                     profilePic: user.profilePic || null,
                   }
                   : { kind: "former-user" },
-              answers: submission.answers.map(toAnswerData),
+              answers: toAnswersData(submission.answers),
             };
           }),
           nextCursor: submissions.length > PAGE_SIZE && page.length
@@ -149,3 +94,35 @@ router.get(
 );
 
 export default router;
+
+function decodeCursor(value: string) {
+  try {
+    const parsed = cursorSchema.parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
+    return { submittedAt: new Date(parsed.submittedAt), id: new mongoose.Types.ObjectId(parsed.id) };
+  } catch {
+    throw badRequest("A valid submissions cursor is required.");
+  }
+}
+
+function encodeCursor(submission: { _id: mongoose.Types.ObjectId; submittedAt?: Date | null }) {
+  if (!submission.submittedAt) throw new Error("A completed submission needs submittedAt.");
+  return Buffer.from(JSON.stringify({
+    submittedAt: submission.submittedAt.toISOString(),
+    id: String(submission._id),
+  })).toString("base64url");
+}
+
+function toAnswersData(answers: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(answers).map(([questionId, value]) => [
+    questionId,
+    Array.isArray(value) ? value.map((item) =>
+      typeof item === "object" && item !== null && "url" in item && typeof item.url === "string"
+        ? {
+          name: (item as StoredFileMetadata).originalName,
+          url: item.url,
+          mimeType: (item as StoredFileMetadata).mimeType,
+          size: (item as StoredFileMetadata).size,
+        }
+        : item) : value,
+  ]));
+}

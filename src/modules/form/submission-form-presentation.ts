@@ -25,7 +25,7 @@ interface SubmissionFormSource {
   }>;
 }
 
-/** Only fields needed to fill out a form; answer keys and internal fields stay private. */
+/** Only fields needed to fill out a form. */
 export function toSubmissionFormPresentation(form: SubmissionFormSource) {
   return {
     id: String(form._id),

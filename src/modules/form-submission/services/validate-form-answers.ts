@@ -5,7 +5,6 @@ import type { UploadCategory } from "#app/modules/file-upload/policy";
 
 export interface SubmissionQuestion {
   _id: string;
-  name: string;
   title: string;
   inputType: string;
   isRequired?: boolean;
@@ -32,18 +31,8 @@ export interface SubmissionSection {
   questions: SubmissionQuestion[];
 }
 
-export interface ValidatedAnswer {
-  sectionId: string;
-  sectionTitle: string;
-  questionId: string;
-  questionName: string;
-  questionTitle: string;
-  inputType: string;
-  value: string | number | boolean | string[] | StoredFileMetadata[];
-  selectedOptions?: Array<{ value: string; label: string }>;
-}
-
 type NonFileAnswer = string | number | boolean | string[];
+export type ValidatedAnswers = Record<string, NonFileAnswer | StoredFileMetadata[]>;
 
 const textTypes = new Set(["string", "text", "email", "countries"]);
 const singleChoiceTypes = new Set(["select", "radio"]);
@@ -142,7 +131,7 @@ export function validateFormAnswers(
   formAnswers: Record<string, unknown>,
   uploadedFiles: Record<string, StoredFileMetadata[]> = {},
   allowMissingFiles = false,
-): ValidatedAnswer[] {
+): ValidatedAnswers {
   const visibleSections = sections.filter((section) => !section.isHidden);
   const questions = visibleSections.flatMap((section) => section.questions);
   if (questions.length === 0) throw badRequest("This form has no questions to submit.");
@@ -152,7 +141,7 @@ export function validateFormAnswers(
     throw badRequest("An answer does not belong to this form.");
   }
 
-  const answers: ValidatedAnswer[] = [];
+  const answers: ValidatedAnswers = {};
   for (const section of visibleSections) {
     for (const question of section.questions) {
       if (question.inputType === "file") {
@@ -164,15 +153,7 @@ export function validateFormAnswers(
           if (question.isRequired && !allowMissingFiles) invalid(question, "An answer is required.");
           continue;
         }
-        answers.push({
-          sectionId: section._id,
-          sectionTitle: section.title,
-          questionId: question._id,
-          questionName: question.name,
-          questionTitle: question.title,
-          inputType: question.inputType,
-          value: files,
-        });
+        answers[question._id] = files;
         continue;
       }
       const rawValue = Object.prototype.hasOwnProperty.call(formAnswers, question._id)
@@ -189,24 +170,7 @@ export function validateFormAnswers(
         invalid(question, "This must be checked.");
       }
       const value = validateValue(question, rawValue);
-      const selectedValues = Array.isArray(value)
-        ? value
-        : singleChoiceTypes.has(question.inputType) ? [String(value)] : [];
-      const selectedOptions = selectedValues.length
-        ? question.options?.filter((option) => selectedValues.includes(option.value))
-          .map((option) => ({ value: option.value, label: option.label }))
-        : undefined;
-
-      answers.push({
-        sectionId: section._id,
-        sectionTitle: section.title,
-        questionId: question._id,
-        questionName: question.name,
-        questionTitle: question.title,
-        inputType: question.inputType,
-        value,
-        ...(selectedOptions?.length ? { selectedOptions } : {}),
-      });
+      answers[question._id] = value;
     }
   }
 

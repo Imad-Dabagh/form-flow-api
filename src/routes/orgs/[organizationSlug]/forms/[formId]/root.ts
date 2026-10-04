@@ -3,8 +3,10 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { FORM_TYPES } from "#app/modules/_shared/constants";
+import { authenticatedUploadRateLimit } from "#app/modules/file-upload/authenticated-rate-limit";
 import Form from "#app/modules/form/models/index";
-import { notFound } from "#app/utils/errors";
+import { uploadQuestionFile } from "#app/modules/form-submission/services/index";
+import { badRequest, notFound } from "#app/utils/errors";
 import { updateFormSchema } from "#app/modules/form/validation";
 
 const router = Router({ mergeParams: true });
@@ -16,7 +18,7 @@ function toFormData(form: any) {
   return {
     id: String(form._id),
     name: form.name,
-    type: form.type ?? "AUTHENTICATED",
+    type: form.type,
     description: form.description,
     sections: form.sections,
     displayMode: form.displayMode ?? "SINGLE_PAGE",
@@ -124,7 +126,7 @@ router.put(
         data: {
           id: String(form._id),
           name: form.name,
-          type: form.type ?? "AUTHENTICATED",
+          type: form.type,
           displayMode: form.displayMode,
           isClosed: form.isClosed,
           updatedAt: form.updatedAt,
@@ -133,6 +135,30 @@ router.put(
     } catch (error) {
       return next(error);
     }
+  },
+);
+
+/** POST /api/orgs/:organizationSlug/forms/:formId/questions/:questionId/uploads */
+router.post(
+  "/questions/:questionId/uploads",
+  authorize("form.update"),
+  authenticatedUploadRateLimit,
+  validate({
+    params: z.object({ formId: formIdSchema, questionId: z.string().min(1).max(128) }),
+  }),
+  async (req, res, next) => {
+    try {
+      const questionId = req.params.questionId;
+      if (typeof questionId !== "string") throw badRequest("A valid question ID is required.");
+      const form = await Form.findOne({
+        _id: req.params.formId,
+        organizationId: req.organizationAccess!.organizationId,
+        archivedAt: null,
+      }).select("organizationId isClosed sections").lean();
+      if (!form) throw notFound("Form");
+      const file = await uploadQuestionFile({ request: req, form, questionId });
+      return res.status(201).json({ success: true, data: file });
+    } catch (error) { return next(error); }
   },
 );
 

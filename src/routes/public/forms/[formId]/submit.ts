@@ -34,7 +34,7 @@ router.put(
         _id: req.params.formId,
         type: "PUBLIC",
         archivedAt: null,
-      }).select("organizationId name sections isClosed").lean();
+      }).select("organizationId sections isClosed").lean();
       if (!form) throw notFound("Form");
       const { submission, replayed } = await submitIdempotently(req, form);
 

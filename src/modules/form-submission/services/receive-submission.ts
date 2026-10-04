@@ -13,7 +13,7 @@ import { isUploadExtensionInCategory, normalizeUploadExtension, type FormQuestio
 import { MAX_UPLOAD_BYTES } from "#app/modules/file-upload/validation";
 import { storageProvider, type StoredFileMetadata } from "#app/services/storage/index";
 import { AppError, badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
-import { validateFormAnswers, type SubmissionSection, type ValidatedAnswer } from "./validate-form-answers.js";
+import { validateFormAnswers, type SubmissionSection, type ValidatedAnswers } from "./validate-form-answers.js";
 
 const MAX_FILES = 10;
 const MAX_ANSWERS_BYTES = 1024 * 1024;
@@ -114,7 +114,7 @@ export async function receiveSubmission<T>(
   req: Request,
   sections: SubmissionSection[],
   organizationId: string,
-  save: (answers: ValidatedAnswer[]) => Promise<T>,
+  save: (answers: ValidatedAnswers) => Promise<T>,
 ): Promise<T> {
   const contentType = req.headers["content-type"]?.toLowerCase() ?? "";
   if (!contentType.startsWith("multipart/form-data;")) {

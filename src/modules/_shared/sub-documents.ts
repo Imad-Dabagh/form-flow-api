@@ -29,7 +29,6 @@ const FormOptionSchema = new mongoose.Schema(
 export const FormQuestionSchema = new mongoose.Schema(
   {
     _id: { type: String, required: true },
-    name: { type: String, required: true },
     title: { type: String, required: true },
     description: { type: String, default: "" },
     placeholder: { type: String, default: "" },
@@ -64,28 +63,6 @@ export const FormSectionSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     isHidden: { type: Boolean, default: false },
     questions: { type: [FormQuestionSchema], default: [] },
-  },
-  { _id: false },
-);
-
-export const FormSubmissionSelectedOptionSchema = new mongoose.Schema(
-  {
-    value: { type: String, required: true },
-    label: { type: String, required: true },
-  },
-  { _id: false },
-);
-
-export const FormSubmissionAnswerSchema = new mongoose.Schema(
-  {
-    sectionId: { type: String, required: true },
-    sectionTitle: { type: String, required: true },
-    questionId: { type: String, required: true },
-    questionName: { type: String, required: true },
-    questionTitle: { type: String, required: true },
-    inputType: { type: String, required: true },
-    value: { type: mongoose.Schema.Types.Mixed, required: true },
-    selectedOptions: { type: [FormSubmissionSelectedOptionSchema], default: undefined },
   },
   { _id: false },
 );

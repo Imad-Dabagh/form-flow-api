@@ -16,8 +16,7 @@ const optionSchema = z.strictObject({
 });
 
 const questionSchema = z.strictObject({
-  _id: nonEmpty,
-  name: nonEmpty,
+  _id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/, "Question IDs may contain letters, numbers, hyphens, and underscores."),
   title: nonEmpty,
   description: z.string().optional(),
   placeholder: z.string().optional(),
@@ -100,7 +99,6 @@ export const updateFormSchema = z.strictObject({
 }).superRefine((body, context) => {
   const sectionIds = new Set<string>();
   const questionIds = new Set<string>();
-  const questionNames = new Set<string>();
 
   body.sections.forEach((section, sectionIndex) => {
     if (sectionIds.has(section._id)) {
@@ -109,15 +107,14 @@ export const updateFormSchema = z.strictObject({
     sectionIds.add(section._id);
 
     section.questions.forEach((question, questionIndex) => {
-      for (const [value, seen, key, message] of [
-        [question._id, questionIds, "_id", "Question IDs must be unique."],
-        [question.name, questionNames, "name", "Question names must be unique."],
-      ] as const) {
-        if (seen.has(value)) {
-          context.addIssue({ code: "custom", path: ["sections", sectionIndex, "questions", questionIndex, key], message });
-        }
-        seen.add(value);
+      if (questionIds.has(question._id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["sections", sectionIndex, "questions", questionIndex, "_id"],
+          message: "Question IDs must be unique.",
+        });
       }
+      questionIds.add(question._id);
     });
   });
 });
