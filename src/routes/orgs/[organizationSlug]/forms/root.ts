@@ -47,7 +47,7 @@ router.get(
           items: forms.map((form) => ({
             id: String(form._id),
             name: form.name,
-            type: form.type ?? "AUTHENTICATED",
+            type: form.type,
             displayMode: form.displayMode ?? "SINGLE_PAGE",
             isClosed: form.isClosed ?? false,
             createdAt: form.createdAt,

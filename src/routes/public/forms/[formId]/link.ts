@@ -35,7 +35,7 @@ router.get(
       res.set("Cache-Control", "no-store");
       return res.status(200).json({
         success: true,
-        data: { type: form.type ?? "AUTHENTICATED" },
+        data: { type: form.type },
       });
     } catch (error) {
       return next(error);
