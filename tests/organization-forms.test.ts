@@ -198,6 +198,76 @@ describe("organization forms", () => {
       .query({ page: 0 }).expect(400);
   });
 
+  it("filters completed submissions by stored user keywords and submitted date", async () => {
+    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const first = await FormSubmission.create({
+      organizationId: alphaId,
+      formId: form.id,
+      submittedAt: new Date("2026-01-02T12:00:00.000Z"),
+      searchKeywords: "Amina Karim amina@gmail.com +212 600 000 000",
+      answers: {},
+    });
+    await FormSubmission.create({
+      organizationId: alphaId,
+      formId: form.id,
+      submittedAt: new Date("2026-01-01T12:00:00.000Z"),
+      searchKeywords: "Omar Idrissi omar@gmail.com",
+      answers: {},
+    });
+
+    const response = await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .query({
+        search: "amina@gmail.com",
+        dateFrom: "2026-01-02T00:00:00.000Z",
+        dateBefore: "2026-01-03T00:00:00.000Z",
+      }).expect(200);
+    expect(response.body.data).toMatchObject({ total: 1, page: 1 });
+    expect(response.body.data.items.map((item: { id: string }) => item.id)).toEqual([first.id]);
+
+    const publicForm = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Public", type: "PUBLIC" });
+    await request(app).get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
+      .query({ search: "amina" }).expect(400);
+  });
+
+  it("filters started and submitted records and sorts their event dates", async () => {
+    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const submitted = await FormSubmission.create({
+      organizationId: alphaId,
+      formId: form.id,
+      submittedBy: new mongoose.Types.ObjectId(),
+      createdAt: new Date("2026-01-01T12:00:00.000Z"),
+      submittedAt: new Date("2026-01-03T12:00:00.000Z"),
+      answers: {},
+    });
+    const started = await FormSubmission.create({
+      organizationId: alphaId,
+      formId: form.id,
+      submittedBy: new mongoose.Types.ObjectId(),
+      createdAt: new Date("2026-01-02T12:00:00.000Z"),
+      submittedAt: null,
+      answers: {},
+    });
+    const url = `/api/orgs/alpha/forms/${form.id}/submissions`;
+
+    const newest = await request(app).get(url).query({ status: "all" }).expect(200);
+    expect(newest.body.data.items.map((item: { id: string }) => item.id))
+      .toEqual([submitted.id, started.id]);
+    const oldest = await request(app).get(url)
+      .query({ status: "all", sort: "oldest" }).expect(200);
+    expect(oldest.body.data.items.map((item: { id: string }) => item.id))
+      .toEqual([started.id, submitted.id]);
+    const drafts = await request(app).get(url)
+      .query({ status: "started", dateFrom: "2026-01-02T00:00:00.000Z", dateBefore: "2026-01-03T00:00:00.000Z" })
+      .expect(200);
+    expect(drafts.body.data).toMatchObject({ total: 1, items: [{ id: started.id, submittedAt: null }] });
+    expect(drafts.body.data.items[0].startedAt).toBe("2026-01-02T12:00:00.000Z");
+
+    const publicForm = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Public", type: "PUBLIC" });
+    await request(app).get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
+      .query({ status: "started" }).expect(400);
+  });
+
   it("returns answers and limited user data without internal fields", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
     const user = await User.create({
