@@ -22,19 +22,30 @@ router.get(
           message: "page must be a positive integer.",
         })
         .optional(),
+      search: z.string().trim().max(100).optional(),
+      type: z.enum(FORM_TYPES).optional(),
+      status: z.enum(["active", "archived"]).optional(),
+      closed: z.enum(["open", "closed"]).optional(),
     }),
   }),
   async (req, res, next) => {
     try {
       const page = Number(req.query.page ?? 1);
+      const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+      const status = req.query.status ?? "active";
       const scope = {
         organizationId: req.organizationAccess!.organizationId,
-        archivedAt: null,
+        archivedAt: status === "archived" ? { $ne: null } : null,
+        ...(req.query.type ? { type: req.query.type } : {}),
+        ...(status === "active" && req.query.closed
+          ? { isClosed: req.query.closed === "closed" }
+          : {}),
+        ...(search ? { name: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } : {}),
       };
       const [forms, total] = await Promise.all([
         Form.find(scope)
-          .select("name type displayMode isClosed createdAt updatedAt")
-          .sort({ updatedAt: -1, _id: -1 })
+          .select("name type displayMode isClosed archivedAt createdAt updatedAt")
+          .sort({ createdAt: -1, _id: -1 })
           .skip((page - 1) * PAGE_SIZE)
           .limit(PAGE_SIZE)
           .lean(),
@@ -50,6 +61,7 @@ router.get(
             type: form.type,
             displayMode: form.displayMode ?? "SINGLE_PAGE",
             isClosed: form.isClosed ?? false,
+            archivedAt: form.archivedAt ?? null,
             createdAt: form.createdAt,
             updatedAt: form.updatedAt,
           })),

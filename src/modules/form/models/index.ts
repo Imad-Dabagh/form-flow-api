@@ -53,7 +53,7 @@ const formSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-formSchema.index({ organizationId: 1, archivedAt: 1, updatedAt: -1, _id: -1 });
+formSchema.index({ organizationId: 1, archivedAt: 1, createdAt: -1, _id: -1 });
 
 const Form = mongoose.models.Form ?? mongoose.model("Form", formSchema);
 
