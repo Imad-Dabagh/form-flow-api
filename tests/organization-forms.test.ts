@@ -159,7 +159,9 @@ describe("organization forms", () => {
         submittedBy: { kind: "anonymous" },
         answers: {},
       }],
-      nextCursor: null,
+      total: 1,
+      page: 1,
+      pageSize: 20,
     });
     await request(app).get(`/api/orgs/alpha/forms/${other.id}/submissions`).expect(404);
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}/submissions`).expect(404);
@@ -179,17 +181,21 @@ describe("organization forms", () => {
     })));
 
     const first = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
+    expect(first.body.data).toMatchObject({ total: 22, page: 1, pageSize: 20 });
     expect(first.body.data.items).toHaveLength(20);
-    expect(first.body.data.nextCursor).toEqual(expect.any(String));
     const second = await request(app)
       .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
-      .query({ cursor: first.body.data.nextCursor }).expect(200);
+      .query({ page: 2 }).expect(200);
+    expect(second.body.data).toMatchObject({ total: 22, page: 2, pageSize: 20 });
     expect(second.body.data.items).toHaveLength(2);
-    expect(second.body.data.nextCursor).toBeNull();
+    const beyondLast = await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .query({ page: 3 }).expect(200);
+    expect(beyondLast.body.data).toMatchObject({ items: [], total: 22, page: 3, pageSize: 20 });
     expect(new Set([...first.body.data.items, ...second.body.data.items]
       .map((item: { id: string }) => item.id)).size).toBe(22);
     await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`)
-      .query({ cursor: "invalid" }).expect(400);
+      .query({ page: 0 }).expect(400);
   });
 
   it("returns answers and limited user data without internal fields", async () => {
