@@ -28,6 +28,9 @@ router.get<{ formId: string }>(
       }).optional(),
       search: z.string().trim().max(100).optional(),
       status: z.enum(["all", "submitted", "started"]).optional(),
+      submissionStatusId: z.string().refine(mongoose.isValidObjectId, {
+        message: "A valid submission status ID is required.",
+      }).optional(),
       sort: z.enum(["newest", "oldest"]).optional(),
       dateFrom: z.iso.datetime().optional(),
       dateBefore: z.iso.datetime().optional(),
@@ -56,6 +59,9 @@ router.get<{ formId: string }>(
         organizationId: new mongoose.Types.ObjectId(organizationId),
         ...(status === "submitted" ? { submittedAt: { $ne: null } }
           : status === "started" ? { submittedAt: null } : {}),
+        ...(req.query.submissionStatusId ? {
+          submissionStatusId: new mongoose.Types.ObjectId(String(req.query.submissionStatusId)),
+        } : {}),
         ...(searchTerm ? {
           searchKeywords: new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
         } : {}),
@@ -70,6 +76,7 @@ router.get<{ formId: string }>(
           submittedAt: Date | null;
           createdAt: Date;
           submittedBy: mongoose.Types.ObjectId | null;
+          submissionStatusId: mongoose.Types.ObjectId | null;
           answers: Record<string, unknown>;
         }>;
         count: Array<{ value: number }>;
@@ -82,7 +89,7 @@ router.get<{ formId: string }>(
             { $sort: { sortAt: direction, _id: direction } },
             { $skip: (page - 1) * PAGE_SIZE },
             { $limit: PAGE_SIZE },
-            { $project: { submittedAt: 1, createdAt: 1, submittedBy: 1, answers: 1 } },
+            { $project: { submittedAt: 1, createdAt: 1, submittedBy: 1, submissionStatusId: 1, answers: 1 } },
           ],
           count: [{ $count: "value" }],
         } },
@@ -112,6 +119,8 @@ router.get<{ formId: string }>(
               id: String(submission._id),
               submittedAt: submission.submittedAt,
               startedAt: submission.createdAt,
+              submissionStatusId: submission.submissionStatusId
+                ? String(submission.submissionStatusId) : null,
               submittedBy: !submission.submittedBy
                 ? { kind: "anonymous" }
                 : user
