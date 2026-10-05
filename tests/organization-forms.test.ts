@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,6 +44,7 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
 import organizationRoutes from "../src/routes/orgs/index.js";
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
+import FormSubmissionStatus from "../src/modules/form-submission-status/models/index.js";
 import User from "../src/modules/user/models/index.js";
 
 const app = express();
@@ -53,18 +54,31 @@ app.use((error: { statusCode?: number; code?: string; message?: string }, _req: 
   res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR", message: error.message });
 });
 
-let mongo: MongoMemoryServer;
+let mongo: MongoMemoryReplSet;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongo.getUri());
 }, 120_000);
 
 beforeEach(async () => {
   await FormSubmission.deleteMany({});
+  await FormSubmissionStatus.deleteMany({});
   await Form.deleteMany({});
   await User.deleteMany({});
 });
+
+async function createDefaultStatus(formId: string, organizationId = alphaId) {
+  const status = await FormSubmissionStatus.create({
+    organizationId,
+    formId,
+    name: "Pending",
+    color: "orange",
+    order: 1,
+    isDefault: true,
+  });
+  return status._id;
+}
 
 afterAll(async () => {
   await mongoose.disconnect();
@@ -86,6 +100,14 @@ describe("organization forms", () => {
     expect(String(form?.organizationId)).toBe(alphaId);
     expect(String(form?.createdBy)).toBe(userId);
     expect(form?.sections).toEqual([]);
+    const statuses = await FormSubmissionStatus.find({ formId: form?._id }).sort({ order: 1 }).lean();
+    expect(statuses).toMatchObject([
+      { name: "Pending", color: "orange", order: 1, isDefault: true, isSubmissionLocked: false },
+      { name: "In review", color: "indigo", order: 2, isDefault: false, isSubmissionLocked: false },
+      { name: "On Hold", color: "amber", order: 3, isDefault: false, isSubmissionLocked: false },
+      { name: "Accepted", color: "green", order: 4, isDefault: false, isSubmissionLocked: true },
+      { name: "Rejected", color: "red", order: 5, isDefault: false, isSubmissionLocked: true },
+    ]);
   });
 
   it("lists only active forms in the current organization with stable pagination", async () => {
@@ -138,15 +160,18 @@ describe("organization forms", () => {
     const own = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Own" });
     const other = await Form.create({ organizationId: betaId, createdBy: userId, name: "Other" });
     const archived = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Archived", archivedAt: new Date() });
+    const submissionStatusId = await createDefaultStatus(own.id);
     const submission = await FormSubmission.create({
       organizationId: alphaId,
       formId: own.id,
+      submissionStatusId,
       submittedAt: new Date(),
       answers: {},
     });
     await FormSubmission.create({
       organizationId: alphaId,
       formId: own.id,
+      submissionStatusId,
       submittedAt: null,
       answers: {},
     });
@@ -171,10 +196,12 @@ describe("organization forms", () => {
 
   it("paginates submissions in stable newest-first order", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const submissionStatusId = await createDefaultStatus(form.id);
     const submittedAt = new Date("2026-01-01T12:00:00.000Z");
     await FormSubmission.insertMany(Array.from({ length: 22 }, (_, index) => ({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       answers: {},
       createdAt: submittedAt,
       submittedAt,
@@ -200,9 +227,11 @@ describe("organization forms", () => {
 
   it("filters completed submissions by stored user keywords and submitted date", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const submissionStatusId = await createDefaultStatus(form.id);
     const first = await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       submittedAt: new Date("2026-01-02T12:00:00.000Z"),
       searchKeywords: "Amina Karim amina@gmail.com +212 600 000 000",
       answers: {},
@@ -210,6 +239,7 @@ describe("organization forms", () => {
     await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       submittedAt: new Date("2026-01-01T12:00:00.000Z"),
       searchKeywords: "Omar Idrissi omar@gmail.com",
       answers: {},
@@ -232,9 +262,11 @@ describe("organization forms", () => {
 
   it("filters started and submitted records and sorts their event dates", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const submissionStatusId = await createDefaultStatus(form.id);
     const submitted = await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       submittedBy: new mongoose.Types.ObjectId(),
       createdAt: new Date("2026-01-01T12:00:00.000Z"),
       submittedAt: new Date("2026-01-03T12:00:00.000Z"),
@@ -243,6 +275,7 @@ describe("organization forms", () => {
     const started = await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       submittedBy: new mongoose.Types.ObjectId(),
       createdAt: new Date("2026-01-02T12:00:00.000Z"),
       submittedAt: null,
@@ -270,6 +303,7 @@ describe("organization forms", () => {
 
   it("returns answers and limited user data without internal fields", async () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const submissionStatusId = await createDefaultStatus(form.id);
     const user = await User.create({
       email: "reader@example.com",
       authUserId: "auth-reader",
@@ -280,6 +314,7 @@ describe("organization forms", () => {
     await FormSubmission.create({
       organizationId: alphaId,
       formId: form.id,
+      submissionStatusId,
       submittedBy: user.id,
       submittedAt: new Date(),
       answers: {

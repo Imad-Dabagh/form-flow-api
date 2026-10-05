@@ -1,10 +1,11 @@
 import express from "express";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
+import FormSubmissionStatus from "../src/modules/form-submission-status/models/index.js";
 import Membership from "../src/modules/membership/models/index.js";
 import User from "../src/modules/user/models/index.js";
 import meRoutes from "../src/routes/me/index.js";
@@ -25,10 +26,10 @@ app.use((error: { statusCode?: number; code?: string }, _req: unknown, res: expr
   res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR" });
 });
 
-let mongo: MongoMemoryServer;
+let mongo: MongoMemoryReplSet;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
+  mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongo.getUri());
   await Promise.all([FormSubmission.init(), Membership.init()]);
 }, 120_000);
@@ -37,6 +38,7 @@ beforeEach(async () => {
   await Promise.all([
     Form.deleteMany({}),
     FormSubmission.deleteMany({}),
+    FormSubmissionStatus.deleteMany({}),
     Membership.deleteMany({}),
     User.deleteMany({}),
   ]);
@@ -54,7 +56,7 @@ afterAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 async function createForm(overrides: Record<string, unknown> = {}) {
-  return Form.create({
+  const form = await Form.create({
     organizationId,
     createdBy: userId,
     name: "Feedback",
@@ -71,6 +73,21 @@ async function createForm(overrides: Record<string, unknown> = {}) {
     }],
     ...overrides,
   });
+  await FormSubmissionStatus.create({
+    organizationId,
+    formId: form.id,
+    name: "Pending",
+    color: "orange",
+    order: 1,
+    isDefault: true,
+  });
+  return form;
+}
+
+async function getDefaultStatusId(formId: string) {
+  const status = await FormSubmissionStatus.findOne({ formId, isDefault: true }).lean();
+  if (!status) throw new Error("Test form has no default submission status.");
+  return status._id;
 }
 
 describe("current user's form submission", () => {
@@ -84,7 +101,10 @@ describe("current user's form submission", () => {
     expect(first.body.data).toMatchObject({
       form: { id: form.id, name: "Feedback" },
       submission: { submittedAt: null, answers: {} },
+      submissionStatuses: [{ name: "Pending", isDefault: true, isSubmissionLocked: false }],
     });
+    expect(first.body.data.submission.submissionStatusId)
+      .toBe(first.body.data.submissionStatuses[0].id);
     expect(second.body.data.submission.id).toBe(first.body.data.submission.id);
     expect(await FormSubmission.countDocuments({ formId: form.id, submittedBy: userId })).toBe(1);
     expect((await FormSubmission.findOne({ formId: form.id, submittedBy: userId }).lean())?.searchKeywords)
@@ -113,6 +133,7 @@ describe("current user's form submission", () => {
     const submission = await FormSubmission.create({
       organizationId,
       formId: form.id,
+      submissionStatusId: await getDefaultStatusId(form.id),
       submittedBy: userId,
       answers: {
         "question-1": "Saved",
@@ -138,7 +159,7 @@ describe("current user's form submission", () => {
     expect(other.body.data.submission.answers).toEqual({});
   });
 
-  it("saves incomplete answers, validates on submit, and keeps the completed record read-only", async () => {
+  it("saves incomplete answers, validates on submit, and updates a completed unlocked submission", async () => {
     const form = await createForm();
     const path = `/api/me/forms/${form.id}/submission`;
     const opened = await request(app).get(path).set("X-Test-User", userId).expect(200);
@@ -158,9 +179,34 @@ describe("current user's form submission", () => {
     expect(completed.body.data.submittedAt).toBeTruthy();
     const repeated = await request(app).put(`${path}/submit`).set("X-Test-User", userId).expect(200);
     expect(repeated.body.data.submittedAt).toBe(completed.body.data.submittedAt);
-    await request(app).put(path).set("X-Test-User", userId)
-      .send({ formAnswers: { "question-1": "Changed" } }).expect(409);
+    const updated = await request(app).put(path).set("X-Test-User", userId)
+      .send({ formAnswers: { "question-1": "Changed" } }).expect(200);
+    expect(updated.body.data).toMatchObject({
+      id,
+      submittedAt: completed.body.data.submittedAt,
+      answers: { "question-1": "Changed" },
+    });
     expect(await FormSubmission.countDocuments({ formId: form.id })).toBe(1);
+  });
+
+  it("blocks answer updates when the current status is locked or the form is closed", async () => {
+    const form = await createForm();
+    const path = `/api/me/forms/${form.id}/submission`;
+    const opened = await request(app).get(path).set("X-Test-User", userId).expect(200);
+    await request(app).put(path).set("X-Test-User", userId)
+      .send({ formAnswers: { "question-1": "Submitted" } }).expect(200);
+    await request(app).put(`${path}/submit`).set("X-Test-User", userId).expect(200);
+
+    const statusId = opened.body.data.submission.submissionStatusId;
+    await FormSubmissionStatus.updateOne({ _id: statusId }, { isSubmissionLocked: true });
+    await request(app).put(path).set("X-Test-User", userId)
+      .send({ formAnswers: { "question-1": "Blocked by status" } }).expect(409);
+
+    await FormSubmissionStatus.updateOne({ _id: statusId }, { isSubmissionLocked: false });
+    await Form.updateOne({ _id: form._id }, { isClosed: true });
+    const closed = await request(app).put(path).set("X-Test-User", userId)
+      .send({ formAnswers: { "question-1": "Blocked by form" } }).expect(409);
+    expect(closed.body.code).toBe("FORM_CLOSED");
   });
 
   it("only lets the owner save and rejects answers outside the form", async () => {
@@ -214,7 +260,7 @@ describe("current user's form submission", () => {
     const submitted = await request(app).put(`${path}/submit`).set("X-Test-User", userId).expect(200);
     expect(submitted.body.data.submittedAt).toBeTruthy();
     expect(submitted.body.data.answers["file-1"]).toMatchObject([{ id: "asset-1" }]);
-    await request(app).delete(`${path}/files/asset-1`).set("X-Test-User", userId).expect(409);
+    await request(app).delete(`${path}/files/asset-1`).set("X-Test-User", userId).expect(400);
   });
 
   it("returns a completed submission even after the form closes", async () => {
@@ -222,6 +268,7 @@ describe("current user's form submission", () => {
     const submittedAt = new Date("2026-01-01T12:00:00.000Z");
     const submission = await FormSubmission.create({
       organizationId, formId: form.id,
+      submissionStatusId: await getDefaultStatusId(form.id),
       submittedBy: userId, submittedAt, answers: {},
     });
     const result = await request(app).get(`/api/me/forms/${form.id}/submission`)
