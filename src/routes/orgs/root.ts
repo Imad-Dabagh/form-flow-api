@@ -2,7 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { validate } from "#app/middlewares/index";
-import { ORGANIZATION_PRIMARY_COLORS, ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
+import { COLOR_FAMILIES, ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
 import Membership from "#app/modules/membership/models/index";
 import Organization from "#app/modules/organization/models/index";
 import User from "#app/modules/user/models/index";
@@ -129,7 +129,7 @@ router.post("/", validate({
   try {
     const name = req.body.name.trim();
     const slug = req.body.slug.trim().toLowerCase();
-    const primaryColor = req.body.primaryColor ?? ORGANIZATION_PRIMARY_COLORS.BLUE;
+    const primaryColor = req.body.primaryColor ?? COLOR_FAMILIES.BLUE;
     const logo = req.body.logo?.trim();
 
     const organization = await session.withTransaction(async () => {

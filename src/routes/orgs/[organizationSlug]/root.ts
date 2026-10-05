@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import { ORGANIZATION_PRIMARY_COLORS } from "#app/modules/_shared/constants";
+import { COLOR_FAMILIES } from "#app/modules/_shared/constants";
 import Organization from "#app/modules/organization/models/index";
 import { notFound } from "#app/utils/errors";
 import { httpsUrlSchema } from "#app/utils/https-url-schema";
@@ -42,7 +42,7 @@ router.put(
       if ("logo" in body) {
         updates.logo = body.logo.trim();
       }
-      if ("primaryColor" in body) updates.primaryColor = body.primaryColor ?? ORGANIZATION_PRIMARY_COLORS.BLUE;
+      if ("primaryColor" in body) updates.primaryColor = body.primaryColor ?? COLOR_FAMILIES.BLUE;
       if ("slogan" in body) updates.slogan = body.slogan.trim();
       if ("shortDescription" in body) {
         updates.shortDescription = body.shortDescription.trim();

@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 import { z } from "zod";
 import {
-  ORGANIZATION_PRIMARY_COLORS,
+  COLOR_FAMILIES,
   ORGANIZATION_ROLES,
   type OrganizationPrimaryColor,
 } from "#app/modules/_shared/constants";
 import { internalError } from "./errors.js";
 
-const organizationPrimaryColors = Object.values(ORGANIZATION_PRIMARY_COLORS);
+const organizationPrimaryColors = Object.values(COLOR_FAMILIES);
 
 export const teamRoles = [ORGANIZATION_ROLES.ADMIN, ORGANIZATION_ROLES.MANAGER];
 
@@ -27,7 +27,7 @@ export const teamEmailSchema = z.string({ error: "A valid email is required." })
 function normalizePrimaryColor(value?: string): OrganizationPrimaryColor {
   return organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
     ? (value as OrganizationPrimaryColor)
-    : ORGANIZATION_PRIMARY_COLORS.BLUE;
+    : COLOR_FAMILIES.BLUE;
 }
 
 export function toOrganizationResponse(organization: {

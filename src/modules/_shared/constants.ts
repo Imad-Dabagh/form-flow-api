@@ -4,7 +4,7 @@ export const ORGANIZATION_ROLES = {
   USER: "USER",
 };
 
-export const ORGANIZATION_PRIMARY_COLORS = {
+export const COLOR_FAMILIES = {
   BLUE: "blue",
   INDIGO: "indigo",
   PURPLE: "purple",
@@ -21,5 +21,5 @@ export const ORGANIZATION_PRIMARY_COLORS = {
 export const FORM_TYPES = ["PUBLIC", "AUTHENTICATED"] as const;
 
 export type OrganizationPrimaryColor =
-  (typeof ORGANIZATION_PRIMARY_COLORS)[keyof typeof ORGANIZATION_PRIMARY_COLORS];
+  (typeof COLOR_FAMILIES)[keyof typeof COLOR_FAMILIES];
 export type FormType = (typeof FORM_TYPES)[number];
