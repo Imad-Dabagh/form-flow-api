@@ -1,8 +1,11 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import { FORM_TYPES } from "#app/modules/_shared/constants";
+import { DEFAULT_FORM_SUBMISSION_STATUSES, FORM_TYPES } from "#app/modules/_shared/constants";
+import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
 import Form from "#app/modules/form/models/index";
+import { internalError } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 const PAGE_SIZE = 20;
@@ -93,15 +96,32 @@ router.post(
     }),
   }),
   async (req, res, next) => {
+    const session = await mongoose.startSession();
+
     try {
-      const form = await Form.create({
-        organizationId: req.organizationAccess!.organizationId,
-        createdBy: req.auth!.userId,
-        name: req.body.name.trim(),
-        type: req.body.type,
-        displayMode: req.body.displayMode,
-        isClosed: req.body.isClosed,
+      const form = await session.withTransaction(async () => {
+        const [createdForm] = await Form.create([{
+          organizationId: req.organizationAccess!.organizationId,
+          createdBy: req.auth!.userId,
+          name: req.body.name.trim(),
+          type: req.body.type,
+          displayMode: req.body.displayMode,
+          isClosed: req.body.isClosed,
+        }], { session });
+
+        await FormSubmissionStatus.insertMany(
+          DEFAULT_FORM_SUBMISSION_STATUSES.map((status) => ({
+            ...status,
+            organizationId: req.organizationAccess!.organizationId,
+            formId: createdForm._id,
+          })),
+          { session },
+        );
+
+        return createdForm;
       });
+
+      if (!form) throw internalError();
 
       return res.status(201).json({
         success: true,
@@ -117,6 +137,8 @@ router.post(
       });
     } catch (error) {
       return next(error);
+    } finally {
+      await session.endSession();
     }
   },
 );

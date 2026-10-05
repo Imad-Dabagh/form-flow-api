@@ -49,6 +49,11 @@ const formSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    statusRevision: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
   },
   { timestamps: true },
 );

@@ -8,6 +8,7 @@ import { authenticatedUploadRateLimit } from "#app/modules/file-upload/authentic
 import { isUploadExtensionInCategory, normalizeUploadExtension } from "#app/modules/file-upload/policy";
 import Form from "#app/modules/form/models/index";
 import { toSubmissionFormPresentation } from "#app/modules/form/submission-form-presentation";
+import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
 import FormSubmission from "#app/modules/form-submission/models/index";
 import { uploadQuestionFile } from "#app/modules/form-submission/services/upload-question-file";
 import { validateFormAnswers, type SubmissionSection } from "#app/modules/form-submission/services/validate-form-answers";
@@ -51,16 +52,38 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
 
     if (!submission) {
       if (form.isClosed) throw formClosed();
-      submission = await FormSubmission.findOneAndUpdate(
-        { formId: form._id, submittedBy: userId },
-        { $setOnInsert: {
-          organizationId: form.organizationId,
-          answers: {},
-          submittedAt: null,
-          searchKeywords,
-        } },
-        { upsert: true, returnDocument: "after", runValidators: true },
-      ).lean() as Submission | null;
+      const session = await mongoose.startSession();
+      try {
+        submission = await session.withTransaction(async () => {
+          const formLock = await Form.updateOne(
+            { _id: form._id, archivedAt: null, isClosed: false },
+            { $inc: { statusRevision: 1 } },
+            { session },
+          );
+          if (formLock.matchedCount !== 1) throw formClosed();
+
+          const defaultStatus = await FormSubmissionStatus.findOne({
+            organizationId: form.organizationId,
+            formId: form._id,
+            isDefault: true,
+          }).select("_id").session(session).lean();
+          if (!defaultStatus) throw conflict("This form has no default submission status.");
+
+          return await FormSubmission.findOneAndUpdate(
+            { formId: form._id, submittedBy: userId },
+            { $setOnInsert: {
+              organizationId: form.organizationId,
+              submissionStatusId: defaultStatus._id,
+              answers: {},
+              submittedAt: null,
+              searchKeywords,
+            } },
+            { upsert: true, returnDocument: "after", runValidators: true, session },
+          ).lean() as Submission | null;
+        }) ?? null;
+      } finally {
+        await session.endSession();
+      }
     }
     if (!submission) throw notFound("Submission");
     if (submission.searchKeywords !== searchKeywords) {
@@ -73,16 +96,33 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
       { upsert: true },
     );
 
+    const statuses = await FormSubmissionStatus.find({
+      organizationId: form.organizationId,
+      formId: form._id,
+    }).sort({ order: 1, _id: 1 }).lean();
+
     return res.status(200).json({
       success: true,
-      data: { form: toSubmissionFormPresentation(form), submission: submissionData(submission) },
+      data: {
+        form: toSubmissionFormPresentation(form),
+        submission: submissionData(submission),
+        submissionStatuses: statuses.map((status) => ({
+          id: String(status._id),
+          name: status.name,
+          description: status.description ?? "",
+          color: status.color,
+          order: status.order,
+          isDefault: status.isDefault ?? false,
+          isSubmissionLocked: status.isSubmissionLocked ?? false,
+        })),
+      },
     });
   } catch (error) {
     return next(error);
   }
 });
 
-/** PUT /api/me/forms/:formId/submission — save progress. */
+/** PUT /api/me/forms/:formId/submission — save answers before or after submission. */
 router.put<{ formId: string }>("/", async (req, res, next) => {
   try {
     const input = saveSchema.safeParse(req.body);
@@ -90,7 +130,7 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
 
     const form = await findForm(req.params.formId);
     const submission = await findSubmission(form, req.auth!.userId);
-    assertEditable(form, submission);
+    await assertEditable(form, submission);
 
     const questions = visibleQuestions(form);
     const editableIds = new Set(questions.filter((question) => question.inputType !== "file").map((question) => question._id));
@@ -104,11 +144,12 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
     );
     const answers = { ...input.data.formAnswers, ...files };
     const updated = await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submittedAt: null },
-      { $set: { answers } },
+      { _id: submission._id, submissionStatusId: submission.submissionStatusId,
+        submittedAt: submission.submittedAt },
+      { $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers } },
       { returnDocument: "after", runValidators: true },
     ).lean() as Submission | null;
-    if (!updated) throw conflict("This submission has already been submitted.");
+    if (!updated) throw conflict("This submission changed while saving. Reload it and try again.");
 
     return res.status(200).json({ success: true, data: submissionData(updated) });
   } catch (error) {
@@ -124,11 +165,12 @@ router.put<{ formId: string }>("/submit", async (req, res, next) => {
     if (submission.submittedAt) {
       return res.status(200).json({ success: true, data: submissionData(submission) });
     }
-    assertEditable(form, submission);
+    await assertEditable(form, submission);
 
     const answers = validateSavedAnswers(form, submission.answers);
     const updated = await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submittedAt: null },
+      { _id: submission._id, submissionStatusId: submission.submissionStatusId,
+        submittedAt: null },
       { $set: { answers, submittedAt: new Date() } },
       { returnDocument: "after", runValidators: true },
     ).lean() as Submission | null;
@@ -145,27 +187,45 @@ router.put<{ formId: string }>("/submit", async (req, res, next) => {
 /** POST /api/me/forms/:formId/submission/files/:questionId */
 router.post("/files/:questionId", authenticatedUploadRateLimit, validate({
   params: z.object({ formId: formIdSchema, questionId: z.string().min(1).max(128) }),
+  query: z.object({ replaceFileId: z.string().min(1).max(128).optional() }),
 }), async (req, res, next) => {
   try {
     const form = await findForm(req.params.formId as string);
     const submission = await findSubmission(form, req.auth!.userId);
-    assertEditable(form, submission);
+    await assertEditable(form, submission);
 
     const questionId = req.params.questionId as string;
     const question = visibleQuestions(form).find((item) => item._id === questionId && item.inputType === "file");
     if (!question) throw notFound("File question");
-    if (storedFiles(submission.answers).length >= 10) throw badRequest("A submission can contain at most 10 files.");
+    const replacement = req.query.replaceFileId
+      ? storedFiles(submission.answers).find(({ questionId: storedQuestionId, file }) =>
+        storedQuestionId === questionId && file.id === req.query.replaceFileId)
+      : undefined;
+    if (req.query.replaceFileId && !replacement) throw notFound("Submission file");
+    if (storedFiles(submission.answers).length >= 10 && !replacement) {
+      throw badRequest("A submission can contain at most 10 files.");
+    }
 
     const uploaded = await uploadQuestionFile({ request: req, form, questionId });
     try {
       const previous = submission.answers[questionId];
-      const files = Array.isArray(previous) ? previous.filter(isStoredFile) : [];
+      const files = Array.isArray(previous)
+        ? previous.filter(isStoredFile).filter((file) => file.id !== replacement?.file.id)
+        : [];
       const updated = await FormSubmission.findOneAndUpdate(
-        { _id: submission._id, submittedAt: null },
-        { $set: { answers: { ...submission.answers, [questionId]: [...files, uploaded] } } },
+        { _id: submission._id, submissionStatusId: submission.submissionStatusId,
+          submittedAt: submission.submittedAt },
+        { $set: { answers: submission.submittedAt
+          ? validateSavedAnswers(form, { ...submission.answers, [questionId]: [...files, uploaded] })
+          : { ...submission.answers, [questionId]: [...files, uploaded] } } },
         { returnDocument: "after", runValidators: true },
       ).lean() as Submission | null;
-      if (!updated) throw conflict("This submission has already been submitted.");
+      if (!updated) throw conflict("This submission changed while uploading. Reload it and try again.");
+      if (replacement) {
+        await storageProvider.delete(replacement.file).catch((cleanupError: unknown) => {
+          Logger.warn("Could not clean up a replaced submission file", cleanupError);
+        });
+      }
       return res.status(201).json({ success: true, data: submissionData(updated) });
     } catch (error) {
       await storageProvider.delete(uploaded).catch((cleanupError: unknown) => {
@@ -185,7 +245,7 @@ router.delete("/files/:fileId", validate({
   try {
     const form = await findForm(req.params.formId as string);
     const submission = await findSubmission(form, req.auth!.userId);
-    assertEditable(form, submission);
+    await assertEditable(form, submission);
 
     const fileId = req.params.fileId as string;
     const entry = storedFiles(submission.answers).find(({ file }) => file.id === fileId);
@@ -197,11 +257,12 @@ router.delete("/files/:fileId", validate({
     else delete answers[entry.questionId];
 
     const updated = await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submittedAt: null },
-      { $set: { answers } },
+      { _id: submission._id, submissionStatusId: submission.submissionStatusId,
+        submittedAt: submission.submittedAt },
+      { $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers } },
       { returnDocument: "after", runValidators: true },
     ).lean() as Submission | null;
-    if (!updated) throw conflict("This submission has already been submitted.");
+    if (!updated) throw conflict("This submission changed while removing a file. Reload it and try again.");
 
     await storageProvider.delete(entry.file).catch((cleanupError: unknown) => {
       Logger.warn("Could not clean up a removed submission file", cleanupError);
@@ -227,6 +288,7 @@ type SubmissionForm = {
 
 type Submission = {
   _id: mongoose.Types.ObjectId;
+  submissionStatusId: mongoose.Types.ObjectId;
   submittedAt: Date | null;
   updatedAt: Date;
   searchKeywords?: string;
@@ -268,9 +330,16 @@ function formClosed() {
   return new AppError("This form is closed.", { statusCode: 409, code: "FORM_CLOSED" });
 }
 
-function assertEditable(form: SubmissionForm, submission: Submission) {
-  if (submission.submittedAt) throw conflict("This submission has already been submitted.");
+async function assertEditable(form: SubmissionForm, submission: Submission) {
   if (form.isClosed) throw formClosed();
+  const status = await FormSubmissionStatus.findOne({
+    _id: submission.submissionStatusId,
+    organizationId: form.organizationId,
+    formId: form._id,
+  }).select("isSubmissionLocked").lean();
+  if (!status || status.isSubmissionLocked) {
+    throw conflict("Answers are locked in this submission status.");
+  }
 }
 
 function visibleQuestions(form: SubmissionForm) {
@@ -293,6 +362,7 @@ function storedFiles(answers: Record<string, unknown>) {
 function submissionData(submission: Submission) {
   return {
     id: String(submission._id),
+    submissionStatusId: String(submission.submissionStatusId),
     submittedAt: submission.submittedAt,
     updatedAt: submission.updatedAt,
     answers: Object.fromEntries(Object.entries(submission.answers).map(([questionId, value]) => [

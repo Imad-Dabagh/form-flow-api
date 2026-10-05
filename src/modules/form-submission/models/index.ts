@@ -12,6 +12,11 @@ const formSubmissionSchema = new mongoose.Schema(
       ref: "Form",
       required: true,
     },
+    submissionStatusId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FormSubmissionStatus",
+      required: true,
+    },
     submittedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -26,6 +31,7 @@ const formSubmissionSchema = new mongoose.Schema(
 );
 
 formSubmissionSchema.index({ formId: 1, submittedAt: -1, _id: -1 });
+formSubmissionSchema.index({ formId: 1, submissionStatusId: 1 });
 formSubmissionSchema.index({ formId: 1, submittedBy: 1 }, {
   unique: true,
   partialFilterExpression: { submittedBy: { $type: "objectId" } },
