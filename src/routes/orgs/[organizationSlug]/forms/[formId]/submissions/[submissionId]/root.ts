@@ -11,7 +11,7 @@ const router = Router({ mergeParams: true });
 
 /** PUT /api/orgs/:organizationSlug/forms/:formId/submissions/:submissionId/status */
 router.put<{ formId: string; submissionId: string }>(
-  "/",
+  "/status",
   authorize("submission.update"),
   validate({
     params: z.object({
