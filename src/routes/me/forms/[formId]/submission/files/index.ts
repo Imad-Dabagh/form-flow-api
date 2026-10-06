@@ -1,10 +1,8 @@
 import { Router } from "express";
-import formRoutes from "./forms/index.js";
 import rootRoutes from "./root.js";
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
 router.use("/", rootRoutes);
-router.use("/forms", formRoutes);
 
 export default router;
