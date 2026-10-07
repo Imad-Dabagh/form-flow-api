@@ -34,9 +34,7 @@ router.get("/", async (req, res, next) => {
         Organization.find({ archivedAt: null })
           .select("name slug logo primaryColor slogan shortDescription")
           .sort({ createdAt: 1 }),
-        Membership.find({ userId: req.auth!.userId })
-          .select("role organizationId")
-          .lean(),
+        Membership.find({ userId: req.auth!.userId }).select("role organizationId").lean(),
       ]);
       const roleByOrganizationId = new Map<string, string>(
         memberships.map((membership): [string, string] => [
@@ -65,18 +63,13 @@ router.get("/", async (req, res, next) => {
 
     memberships.sort(
       (left, right) =>
-        ORGANIZATION_ROLE_PRIORITY[left.role] -
-        ORGANIZATION_ROLE_PRIORITY[right.role],
+        ORGANIZATION_ROLE_PRIORITY[left.role] - ORGANIZATION_ROLE_PRIORITY[right.role],
     );
 
     const organizations = memberships.flatMap((membership) => {
       const organization = membership.organizationId;
 
-      if (
-        !organization ||
-        typeof organization !== "object" ||
-        !("_id" in organization)
-      ) {
+      if (!organization || typeof organization !== "object" || !("_id" in organization)) {
         return [];
       }
 
@@ -107,79 +100,85 @@ router.get("/", async (req, res, next) => {
 /**
  * POST /api/orgs
  */
-router.post("/", validate({
-  body: z.object({
-    name: z.string({ error: "name is required." }).trim()
-      .min(1, "name is required.")
-      .max(50, "name must be 50 characters or fewer."),
-    slug: z.string({ error: "slug is required." }).trim()
-      .min(1, "slug is required.")
-      .refine((value) => ORGANIZATION_SLUG_PATTERN.test(value.toLowerCase()), {
-        message: "slug must use lowercase letters, numbers, and single hyphens only.",
-      })
-      .refine((value) => value.length <= 20, {
-        message: "slug must be 20 characters or fewer.",
-      }),
-    primaryColor: primaryColorSchema.nullish(),
-    logo: httpsUrlSchema("logo").optional(),
+router.post(
+  "/",
+  validate({
+    body: z.object({
+      name: z
+        .string({ error: "name is required." })
+        .trim()
+        .min(1, "name is required.")
+        .max(50, "name must be 50 characters or fewer."),
+      slug: z
+        .string({ error: "slug is required." })
+        .trim()
+        .min(1, "slug is required.")
+        .refine((value) => ORGANIZATION_SLUG_PATTERN.test(value.toLowerCase()), {
+          message: "slug must use lowercase letters, numbers, and single hyphens only.",
+        })
+        .refine((value) => value.length <= 20, {
+          message: "slug must be 20 characters or fewer.",
+        }),
+      primaryColor: primaryColorSchema.nullish(),
+      logo: httpsUrlSchema("logo").optional(),
+    }),
   }),
-}), async (req, res, next) => {
-  const session = await mongoose.startSession();
+  async (req, res, next) => {
+    const session = await mongoose.startSession();
 
-  try {
-    const name = req.body.name.trim();
-    const slug = req.body.slug.trim().toLowerCase();
-    const primaryColor = req.body.primaryColor ?? COLOR_FAMILIES.BLUE;
-    const logo = req.body.logo?.trim();
+    try {
+      const name = req.body.name.trim();
+      const slug = req.body.slug.trim().toLowerCase();
+      const primaryColor = req.body.primaryColor ?? COLOR_FAMILIES.BLUE;
+      const logo = req.body.logo?.trim();
 
-    const organization = await session.withTransaction(async () => {
-      const slugAlreadyInUse = await Organization.exists({ slug }).session(
-        session,
-      );
+      const organization = await session.withTransaction(async () => {
+        const slugAlreadyInUse = await Organization.exists({ slug }).session(session);
 
-      if (slugAlreadyInUse) {
-        throw conflict("This organization slug is already in use.");
+        if (slugAlreadyInUse) {
+          throw conflict("This organization slug is already in use.");
+        }
+
+        const [createdOrganization] = await Organization.create(
+          [{ name, slug, primaryColor, ...(logo !== undefined ? { logo } : {}) }],
+          { session },
+        );
+        await Membership.create(
+          [
+            {
+              userId: req.auth!.userId,
+              organizationId: createdOrganization._id,
+              role: ORGANIZATION_ROLES.ADMIN,
+            },
+          ],
+          { session },
+        );
+        await User.updateOne(
+          { _id: req.auth!.userId, onboardingCompletedAt: null },
+          { $set: { onboardingCompletedAt: new Date() } },
+          { session },
+        );
+
+        return createdOrganization;
+      });
+
+      if (!organization) {
+        throw internalError();
       }
 
-      const [createdOrganization] = await Organization.create(
-        [{ name, slug, primaryColor, ...(logo !== undefined ? { logo } : {}) }],
-        { session },
-      );
-      await Membership.create(
-        [
-          {
-            userId: req.auth!.userId,
-            organizationId: createdOrganization._id,
-            role: ORGANIZATION_ROLES.ADMIN,
-          },
-        ],
-        { session },
-      );
-      await User.updateOne(
-        { _id: req.auth!.userId, onboardingCompletedAt: null },
-        { $set: { onboardingCompletedAt: new Date() } },
-        { session },
-      );
-
-      return createdOrganization;
-    });
-
-    if (!organization) {
-      throw internalError();
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...toOrganizationResponse(organization),
+          role: ORGANIZATION_ROLES.ADMIN,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    } finally {
+      await session.endSession();
     }
-
-    return res.status(201).json({
-      success: true,
-      data: {
-        ...toOrganizationResponse(organization),
-        role: ORGANIZATION_ROLES.ADMIN,
-      },
-    });
-  } catch (error) {
-    return next(error);
-  } finally {
-    await session.endSession();
-  }
-});
+  },
+);
 
 export default router;

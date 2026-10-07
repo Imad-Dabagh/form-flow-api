@@ -13,17 +13,12 @@ const resolveUploadTenant: RequestHandler = async (req, _res, next) => {
     const organizationSlug = req.get("x-organization-slug")?.trim();
 
     if (!organizationSlug) {
-      req.uploadTenantId = req.auth.isSuperAdmin
-        ? "platform"
-        : `user-${req.auth.userId}`;
+      req.uploadTenantId = req.auth.isSuperAdmin ? "platform" : `user-${req.auth.userId}`;
       return next();
     }
 
     req.organization = await resolveOrganizationBySlug(organizationSlug);
-    req.organizationAccess = await resolveOrganizationAccess(
-      req.auth,
-      req.organization,
-    );
+    req.organizationAccess = await resolveOrganizationAccess(req.auth, req.organization);
     req.uploadTenantId = `organization-${req.organization.organizationId}`;
 
     AsyncHook.updateRequestContext({

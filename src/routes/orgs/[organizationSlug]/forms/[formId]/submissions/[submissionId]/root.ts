@@ -45,14 +45,19 @@ router.put<{ formId: string; submissionId: string }>(
           _id: req.body.submissionStatusId,
           organizationId,
           formId,
-        }).select("_id").session(session).lean();
+        })
+          .select("_id")
+          .session(session)
+          .lean();
         if (!status) throw notFound("Submission status");
 
         const updated = await FormSubmission.findOneAndUpdate(
           { _id: req.params.submissionId, organizationId, formId },
           { $set: { submissionStatusId: status._id } },
           { returnDocument: "after", runValidators: true, session },
-        ).select("_id submissionStatusId updatedAt").lean();
+        )
+          .select("_id submissionStatusId updatedAt")
+          .lean();
         if (!updated) throw notFound("Submission");
         return updated;
       });

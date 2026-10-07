@@ -33,9 +33,6 @@ export function normalizeUploadExtension(extension: string): string {
   return normalized === "jpeg" ? "jpg" : normalized;
 }
 
-export function isUploadExtensionInCategory(
-  category: UploadCategory,
-  extension: string,
-): boolean {
+export function isUploadExtensionInCategory(category: UploadCategory, extension: string): boolean {
   return UPLOAD_EXTENSIONS[category].includes(normalizeUploadExtension(extension));
 }

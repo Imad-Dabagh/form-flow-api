@@ -31,48 +31,44 @@ const memberAddRateLimit = rateLimit({
 /**
  * GET /api/orgs/:organizationSlug/members
  */
-router.get(
-  "/",
-  authorize("membership.read"),
-  async (req, res, next) => {
-    try {
-      const memberships = await Membership.find({
-        organizationId: req.organizationAccess!.organizationId,
-        role: { $in: teamRoles },
-      })
-        .select("userId role createdAt")
-        .sort({ role: 1, createdAt: 1 })
-        .lean();
+router.get("/", authorize("membership.read"), async (req, res, next) => {
+  try {
+    const memberships = await Membership.find({
+      organizationId: req.organizationAccess!.organizationId,
+      role: { $in: teamRoles },
+    })
+      .select("userId role createdAt")
+      .sort({ role: 1, createdAt: 1 })
+      .lean();
 
-      const users = await User.find({
-        _id: { $in: memberships.map((membership) => membership.userId) },
-      })
-        .select("firstName lastName email profilePic")
-        .lean();
-      const usersById = new Map(users.map((user) => [String(user._id), user]));
+    const users = await User.find({
+      _id: { $in: memberships.map((membership) => membership.userId) },
+    })
+      .select("firstName lastName email profilePic")
+      .lean();
+    const usersById = new Map(users.map((user) => [String(user._id), user]));
 
-      return res.status(200).json({
-        success: true,
-        data: memberships.map((membership) => {
-          const user = usersById.get(String(membership.userId));
+    return res.status(200).json({
+      success: true,
+      data: memberships.map((membership) => {
+        const user = usersById.get(String(membership.userId));
 
-          return {
-            id: String(membership._id),
-            userId: String(membership.userId),
-            firstName: user?.firstName ?? "",
-            lastName: user?.lastName ?? "",
-            email: user?.email ?? "",
-            profilePic: user?.profilePic ?? "",
-            role: membership.role,
-            joinedAt: membership.createdAt,
-          };
-        }),
-      });
-    } catch (error) {
-      return next(error);
-    }
-  },
-);
+        return {
+          id: String(membership._id),
+          userId: String(membership.userId),
+          firstName: user?.firstName ?? "",
+          lastName: user?.lastName ?? "",
+          email: user?.email ?? "",
+          profilePic: user?.profilePic ?? "",
+          role: membership.role,
+          joinedAt: membership.createdAt,
+        };
+      }),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 /**
  * POST /api/orgs/:organizationSlug/members
@@ -82,13 +78,17 @@ router.post(
   authorize("membership.create"),
   memberAddRateLimit,
   validate({
-    body: z.strictObject({
-      email: teamEmailSchema,
-      role: z.string({ error: "role must be ADMIN or MANAGER." })
-        .refine((role) => teamRoles.includes(role), {
-          message: "role must be ADMIN or MANAGER.",
-        }),
-    }, { error: "Only email and role can be provided." }),
+    body: z.strictObject(
+      {
+        email: teamEmailSchema,
+        role: z
+          .string({ error: "role must be ADMIN or MANAGER." })
+          .refine((role) => teamRoles.includes(role), {
+            message: "role must be ADMIN or MANAGER.",
+          }),
+      },
+      { error: "Only email and role can be provided." },
+    ),
   }),
   async (req, res, next) => {
     try {
@@ -114,10 +114,12 @@ router.post(
               throw conflict("This person is already a team member. Edit their role in the table.");
             }
 
-            const membership = existing ?? new Membership({
-              organizationId: req.organizationAccess!.organizationId,
-              userId: user._id,
-            });
+            const membership =
+              existing ??
+              new Membership({
+                organizationId: req.organizationAccess!.organizationId,
+                userId: user._id,
+              });
             membership.role = body.role;
             await membership.save({ session });
             await Invitation.updateMany(
@@ -166,9 +168,10 @@ router.post(
       });
 
       const requestOrigin = req.get("origin");
-      const frontendOrigin = requestOrigin && config.corsOrigins.includes(requestOrigin)
-        ? requestOrigin
-        : config.corsOrigins[0];
+      const frontendOrigin =
+        requestOrigin && config.corsOrigins.includes(requestOrigin)
+          ? requestOrigin
+          : config.corsOrigins[0];
       const url = new URL(`/invitations/${token}`, frontendOrigin).toString();
       try {
         await sendOrganizationInvitationEmail({

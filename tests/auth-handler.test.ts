@@ -45,9 +45,7 @@ describe("Better Auth Express integration", () => {
         request(app).get("/api/invitations/invalid"),
         request(app).post("/api/invitations/invalid/accept"),
       ]);
-      expect(protectedResponses.map((response) => response.status)).toEqual([
-        401, 401, 401, 401,
-      ]);
+      expect(protectedResponses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
     } finally {
       errorLog.mockRestore();
     }

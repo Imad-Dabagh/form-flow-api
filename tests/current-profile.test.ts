@@ -30,9 +30,16 @@ import User from "../src/modules/user/models/index.js";
 const app = express();
 app.use(express.json());
 app.use("/api/me", profileRoutes);
-app.use((error: { statusCode?: number; code?: string }, _req: unknown, res: express.Response, _next: unknown) => {
-  res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR" });
-});
+app.use(
+  (
+    error: { statusCode?: number; code?: string },
+    _req: unknown,
+    res: express.Response,
+    _next: unknown,
+  ) => {
+    res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR" });
+  },
+);
 
 let mongo: MongoMemoryServer;
 let userId: string;
@@ -65,11 +72,14 @@ afterAll(async () => {
 
 describe("current profile", () => {
   it("returns profile details with session-derived flags", async () => {
-    await User.updateOne({ _id: userId }, {
-      coverPhoto: "https://example.com/cover.jpg",
-      phone: "+1 555 0100",
-      shortDescription: "About me",
-    });
+    await User.updateOne(
+      { _id: userId },
+      {
+        coverPhoto: "https://example.com/cover.jpg",
+        phone: "+1 555 0100",
+        shortDescription: "About me",
+      },
+    );
 
     const response = await request(app).get("/api/me").set("x-test-user-id", userId).expect(200);
     expect(response.body.data).toMatchObject({
@@ -85,14 +95,16 @@ describe("current profile", () => {
   });
 
   it("updates and clears optional profile fields without requiring them in later requests", async () => {
-    const updated = await profileRequest().send({
-      firstName: " New ",
-      lastName: " Name ",
-      profilePic: "https://example.com/avatar.jpg",
-      coverPhoto: "https://example.com/cover.jpg",
-      phone: " +1 555 0100 ",
-      shortDescription: " Hello world ",
-    }).expect(200);
+    const updated = await profileRequest()
+      .send({
+        firstName: " New ",
+        lastName: " Name ",
+        profilePic: "https://example.com/avatar.jpg",
+        coverPhoto: "https://example.com/cover.jpg",
+        phone: " +1 555 0100 ",
+        shortDescription: " Hello world ",
+      })
+      .expect(200);
     expect(updated.body.data).toMatchObject({
       firstName: "New",
       lastName: "Name",
@@ -107,13 +119,15 @@ describe("current profile", () => {
     expect(kept.body.data.coverPhoto).toBe("https://example.com/cover.jpg");
     expect(kept.body.data.phone).toBe("+1 555 0100");
 
-    const cleared = await profileRequest().send({
-      firstName: "New",
-      lastName: "Name",
-      coverPhoto: "",
-      phone: "",
-      shortDescription: "",
-    }).expect(200);
+    const cleared = await profileRequest()
+      .send({
+        firstName: "New",
+        lastName: "Name",
+        coverPhoto: "",
+        phone: "",
+        shortDescription: "",
+      })
+      .expect(200);
     expect(cleared.body.data).toMatchObject({
       coverPhoto: "",
       phone: "",
@@ -123,10 +137,18 @@ describe("current profile", () => {
 
   it("rejects account fields and invalid profile values", async () => {
     const names = { firstName: "Existing", lastName: "Person" };
-    await profileRequest().send({ ...names, email: "other@example.com" }).expect(400);
-    await profileRequest().send({ ...names, coverPhoto: "http://example.com/cover.jpg" }).expect(400);
-    await profileRequest().send({ ...names, phone: "x".repeat(31) }).expect(400);
-    await profileRequest().send({ ...names, shortDescription: "x".repeat(501) }).expect(400);
+    await profileRequest()
+      .send({ ...names, email: "other@example.com" })
+      .expect(400);
+    await profileRequest()
+      .send({ ...names, coverPhoto: "http://example.com/cover.jpg" })
+      .expect(400);
+    await profileRequest()
+      .send({ ...names, phone: "x".repeat(31) })
+      .expect(400);
+    await profileRequest()
+      .send({ ...names, shortDescription: "x".repeat(501) })
+      .expect(400);
     expect((await User.findById(userId))?.email).toBe("person@example.com");
   });
 
@@ -137,7 +159,9 @@ describe("current profile", () => {
       role: "ADMIN",
     });
 
-    const response = await profileRequest().send({ firstName: "Existing", lastName: "Person" }).expect(200);
+    const response = await profileRequest()
+      .send({ firstName: "Existing", lastName: "Person" })
+      .expect(200);
     expect(response.body.data.onboardingCompletedAt).not.toBeNull();
   });
 });

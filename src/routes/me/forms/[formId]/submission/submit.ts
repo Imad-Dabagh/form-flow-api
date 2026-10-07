@@ -23,16 +23,16 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
     await assertEditable(form, submission);
 
     const answers = validateSavedAnswers(form, submission.answers);
-    const updated = await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submissionStatusId: submission.submissionStatusId,
-        submittedAt: null },
+    const updated = (await FormSubmission.findOneAndUpdate(
+      { _id: submission._id, submissionStatusId: submission.submissionStatusId, submittedAt: null },
       { $set: { answers, submittedAt: new Date() } },
       { returnDocument: "after", runValidators: true },
-    ).lean() as Submission | null;
+    ).lean()) as Submission | null;
     if (updated) return res.status(200).json({ success: true, data: submissionData(updated) });
 
     const latest = await findSubmission(form, req.auth!.userId);
-    if (latest.submittedAt) return res.status(200).json({ success: true, data: submissionData(latest) });
+    if (latest.submittedAt)
+      return res.status(200).json({ success: true, data: submissionData(latest) });
     throw conflict("This submission changed while submitting. Reload it and try again.");
   } catch (error) {
     return next(error);

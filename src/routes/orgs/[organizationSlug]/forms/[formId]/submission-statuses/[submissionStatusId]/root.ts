@@ -110,9 +110,7 @@ router.put(
         if (!target) throw notFound("Submission status");
 
         if (req.body.isDefault === false && target.isDefault) {
-          throw conflict(
-            "Choose another default submission status before clearing this one.",
-          );
+          throw conflict("Choose another default submission status before clearing this one.");
         }
 
         if (req.body.isDefault) {
@@ -125,8 +123,7 @@ router.put(
 
         if (req.body.name !== undefined) target.name = req.body.name;
 
-        if (req.body.description !== undefined)
-          target.description = req.body.description;
+        if (req.body.description !== undefined) target.description = req.body.description;
 
         if (req.body.color !== undefined) target.color = req.body.color;
 
@@ -134,8 +131,7 @@ router.put(
           target.isSubmissionLocked = req.body.isSubmissionLocked;
         }
 
-        if (req.body.isDefault !== undefined)
-          target.isDefault = req.body.isDefault;
+        if (req.body.isDefault !== undefined) target.isDefault = req.body.isDefault;
 
         await target.save({ session });
 
@@ -165,68 +161,61 @@ router.put(
 );
 
 /** DELETE /api/orgs/:organizationSlug/forms/:formId/submission-statuses/:submissionStatusId */
-router.delete(
-  "/",
-  authorize("form.update"),
-  validate({ params }),
-  async (req, res, next) => {
-    const session = await mongoose.startSession();
-    try {
-      const organizationId = req.organizationAccess!.organizationId;
-      const formId = req.params.formId;
-      await session.withTransaction(async () => {
-        const form = await Form.updateOne(
-          { _id: formId, organizationId, archivedAt: null },
-          { $inc: { statusRevision: 1 } },
-          { session },
-        );
-        if (form.matchedCount !== 1) throw notFound("Form");
-        const status = await FormSubmissionStatus.findOne({
-          organizationId,
-          formId,
-          _id: req.params.submissionStatusId,
-        })
-          .session(session)
-          .lean();
-        if (!status) throw notFound("Submission status");
+router.delete("/", authorize("form.update"), validate({ params }), async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    const organizationId = req.organizationAccess!.organizationId;
+    const formId = req.params.formId;
+    await session.withTransaction(async () => {
+      const form = await Form.updateOne(
+        { _id: formId, organizationId, archivedAt: null },
+        { $inc: { statusRevision: 1 } },
+        { session },
+      );
+      if (form.matchedCount !== 1) throw notFound("Form");
+      const status = await FormSubmissionStatus.findOne({
+        organizationId,
+        formId,
+        _id: req.params.submissionStatusId,
+      })
+        .session(session)
+        .lean();
+      if (!status) throw notFound("Submission status");
 
-        if (status.isDefault) {
-          throw conflict(
-            "Choose another default submission status before deleting this one.",
-          );
-        }
+      if (status.isDefault) {
+        throw conflict("Choose another default submission status before deleting this one.");
+      }
 
-        const submissionCount = await FormSubmission.countDocuments({
-          organizationId,
-          formId,
-          submissionStatusId: status._id,
-        }).session(session);
+      const submissionCount = await FormSubmission.countDocuments({
+        organizationId,
+        formId,
+        submissionStatusId: status._id,
+      }).session(session);
 
-        if (submissionCount > 0) {
-          throw conflict("A submission status in use cannot be deleted.");
-        }
+      if (submissionCount > 0) {
+        throw conflict("A submission status in use cannot be deleted.");
+      }
 
-        await FormSubmissionStatus.deleteOne(
-          { organizationId, formId, _id: status._id },
-          { session },
-        );
+      await FormSubmissionStatus.deleteOne(
+        { organizationId, formId, _id: status._id },
+        { session },
+      );
 
-        await FormSubmissionStatus.updateMany(
-          { organizationId, formId, order: { $gt: status.order } },
-          { $inc: { order: -1 } },
-          { session },
-        );
-      });
-      return res.status(200).json({
-        success: true,
-        data: { id: req.params.submissionStatusId },
-      });
-    } catch (error) {
-      return next(error);
-    } finally {
-      await session.endSession();
-    }
-  },
-);
+      await FormSubmissionStatus.updateMany(
+        { organizationId, formId, order: { $gt: status.order } },
+        { $inc: { order: -1 } },
+        { session },
+      );
+    });
+    return res.status(200).json({
+      success: true,
+      data: { id: req.params.submissionStatusId },
+    });
+  } catch (error) {
+    return next(error);
+  } finally {
+    await session.endSession();
+  }
+});
 
 export default router;

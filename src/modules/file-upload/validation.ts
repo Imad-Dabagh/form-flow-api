@@ -1,10 +1,6 @@
 import { Readable } from "node:stream";
 import { fileTypeFromBuffer } from "file-type";
-import {
-  badRequest,
-  payloadTooLarge,
-  unsupportedMediaType,
-} from "#app/utils/errors";
+import { badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
 import { getFileExtension } from "./file-name.js";
 import {
   isUploadExtensionInCategory,
@@ -81,10 +77,7 @@ function normalizeMimeType(value: string): string {
 }
 
 function assertAllowedMimeType(mimeType: string): void {
-  if (
-    mimeType.startsWith("video/") ||
-    blockedMimeTypes.has(mimeType)
-  ) {
+  if (mimeType.startsWith("video/") || blockedMimeTypes.has(mimeType)) {
     throw unsupportedMediaType("This file type is not allowed.");
   }
 }
@@ -128,8 +121,12 @@ export async function prepareUploadStream(
   try {
     assertAllowedExtension(extension);
     assertAllowedMimeType(normalizedDeclaredMimeType);
-    if (policy && (!isUploadExtensionInCategory(policy.category, extension) ||
-      (policy.allowedExtensions.length > 0 && !policy.allowedExtensions.includes(normalizeUploadExtension(extension))))) {
+    if (
+      policy &&
+      (!isUploadExtensionInCategory(policy.category, extension) ||
+        (policy.allowedExtensions.length > 0 &&
+          !policy.allowedExtensions.includes(normalizeUploadExtension(extension))))
+    ) {
       throw unsupportedMediaType("This file extension is not allowed for this question.");
     }
   } catch (error) {
@@ -150,9 +147,7 @@ export async function prepareUploadStream(
       break;
     }
 
-    const chunk = Buffer.isBuffer(next.value)
-      ? next.value
-      : Buffer.from(next.value as Uint8Array);
+    const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value as Uint8Array);
     chunks.push(chunk);
     inspectedBytes += chunk.length;
   }
@@ -181,8 +176,11 @@ export async function prepareUploadStream(
     if (policy) {
       const normalizedExtension = normalizeUploadExtension(extension);
       const detectedExtension = detectedType && normalizeUploadExtension(detectedType.ext);
-      if (!detectedType || detectedExtension !== normalizedExtension ||
-        detectedType.mime !== UPLOAD_MIME_TYPES[normalizedExtension]) {
+      if (
+        !detectedType ||
+        detectedExtension !== normalizedExtension ||
+        detectedType.mime !== UPLOAD_MIME_TYPES[normalizedExtension]
+      ) {
         throw unsupportedMediaType("The file content does not match its allowed extension.");
       }
     }
@@ -209,9 +207,7 @@ export async function prepareUploadStream(
 
         totalBytes += chunk.length;
         if (totalBytes > MAX_UPLOAD_BYTES) {
-          throw payloadTooLarge(
-            `Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`,
-          );
+          throw payloadTooLarge(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
         }
 
         yield chunk;
@@ -219,16 +215,13 @@ export async function prepareUploadStream(
     }
 
     if (source.truncated) {
-      throw payloadTooLarge(
-        `Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`,
-      );
+      throw payloadTooLarge(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
     }
   }
 
   return {
     stream: Readable.from(replay()),
-    mimeType:
-      detectedType?.mime || normalizedDeclaredMimeType || "application/octet-stream",
+    mimeType: detectedType?.mime || normalizedDeclaredMimeType || "application/octet-stream",
     ...(detectedType?.ext ? { detectedExtension: detectedType.ext } : {}),
   };
 }

@@ -26,7 +26,10 @@ async function requireAnotherAdmin(
   }
 }
 
-async function lockOrganizationMemberships(organizationId: string, session: mongoose.ClientSession) {
+async function lockOrganizationMemberships(
+  organizationId: string,
+  session: mongoose.ClientSession,
+) {
   // Role changes in the same organization must serialize before checking the last admin.
   const result = await Organization.updateOne(
     { _id: organizationId, archivedAt: null },
@@ -48,12 +51,16 @@ router.put(
         message: "A valid membership ID is required.",
       }),
     }),
-    body: z.strictObject({
-      role: z.string({ error: "role must be ADMIN or MANAGER." })
-        .refine((role) => teamRoles.includes(role), {
-          message: "role must be ADMIN or MANAGER.",
-        }),
-    }, { error: "role must be ADMIN or MANAGER." }),
+    body: z.strictObject(
+      {
+        role: z
+          .string({ error: "role must be ADMIN or MANAGER." })
+          .refine((role) => teamRoles.includes(role), {
+            message: "role must be ADMIN or MANAGER.",
+          }),
+      },
+      { error: "role must be ADMIN or MANAGER." },
+    ),
   }),
   async (req, res, next) => {
     const session = await mongoose.startSession();
@@ -70,7 +77,10 @@ router.put(
         }).session(session);
         if (!membership) throw notFound("Membership");
 
-        if (membership.role === ORGANIZATION_ROLES.ADMIN && body.role !== ORGANIZATION_ROLES.ADMIN) {
+        if (
+          membership.role === ORGANIZATION_ROLES.ADMIN &&
+          body.role !== ORGANIZATION_ROLES.ADMIN
+        ) {
           await requireAnotherAdmin(req.organizationAccess!.organizationId, membershipId, session);
         }
 

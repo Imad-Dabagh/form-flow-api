@@ -38,6 +38,5 @@ export const DEFAULT_FORM_SUBMISSION_STATUSES = [
 
 export const FORM_TYPES = ["PUBLIC", "AUTHENTICATED"] as const;
 
-export type OrganizationPrimaryColor =
-  (typeof COLOR_FAMILIES)[keyof typeof COLOR_FAMILIES];
+export type OrganizationPrimaryColor = (typeof COLOR_FAMILIES)[keyof typeof COLOR_FAMILIES];
 export type FormType = (typeof FORM_TYPES)[number];

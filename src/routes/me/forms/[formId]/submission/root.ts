@@ -23,9 +23,10 @@ import {
 const router = Router({ mergeParams: true });
 
 const saveSchema = z.strictObject({
-  formAnswers: z.record(z.string(), z.union([
-    z.string(), z.number().finite(), z.boolean(), z.array(z.string()), z.null(),
-  ])),
+  formAnswers: z.record(
+    z.string(),
+    z.union([z.string(), z.number().finite(), z.boolean(), z.array(z.string()), z.null()]),
+  ),
 });
 /** GET /api/me/forms/:formId/submission — open or resume. */
 router.get<{ formId: string }>("/", async (req, res, next) => {
@@ -35,39 +36,48 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
     const user = await User.findById(userId).select("firstName lastName email phone").lean();
     if (!user) throw notFound("User");
     const searchKeywords = generateKeywords(user);
-    let submission = await FormSubmission.findOne({ formId: form._id, submittedBy: userId }).lean() as Submission | null;
+    let submission = (await FormSubmission.findOne({
+      formId: form._id,
+      submittedBy: userId,
+    }).lean()) as Submission | null;
 
     if (!submission) {
       if (form.isClosed) throw formClosed();
       const session = await mongoose.startSession();
       try {
-        submission = await session.withTransaction(async () => {
-          const formLock = await Form.updateOne(
-            { _id: form._id, archivedAt: null, isClosed: false },
-            { $inc: { statusRevision: 1 } },
-            { session },
-          );
-          if (formLock.matchedCount !== 1) throw formClosed();
+        submission =
+          (await session.withTransaction(async () => {
+            const formLock = await Form.updateOne(
+              { _id: form._id, archivedAt: null, isClosed: false },
+              { $inc: { statusRevision: 1 } },
+              { session },
+            );
+            if (formLock.matchedCount !== 1) throw formClosed();
 
-          const defaultStatus = await FormSubmissionStatus.findOne({
-            organizationId: form.organizationId,
-            formId: form._id,
-            isDefault: true,
-          }).select("_id").session(session).lean();
-          if (!defaultStatus) throw conflict("This form has no default submission status.");
-
-          return await FormSubmission.findOneAndUpdate(
-            { formId: form._id, submittedBy: userId },
-            { $setOnInsert: {
+            const defaultStatus = await FormSubmissionStatus.findOne({
               organizationId: form.organizationId,
-              submissionStatusId: defaultStatus._id,
-              answers: {},
-              submittedAt: null,
-              searchKeywords,
-            } },
-            { upsert: true, returnDocument: "after", runValidators: true, session },
-          ).lean() as Submission | null;
-        }) ?? null;
+              formId: form._id,
+              isDefault: true,
+            })
+              .select("_id")
+              .session(session)
+              .lean();
+            if (!defaultStatus) throw conflict("This form has no default submission status.");
+
+            return (await FormSubmission.findOneAndUpdate(
+              { formId: form._id, submittedBy: userId },
+              {
+                $setOnInsert: {
+                  organizationId: form.organizationId,
+                  submissionStatusId: defaultStatus._id,
+                  answers: {},
+                  submittedAt: null,
+                  searchKeywords,
+                },
+              },
+              { upsert: true, returnDocument: "after", runValidators: true, session },
+            ).lean()) as Submission | null;
+          })) ?? null;
       } finally {
         await session.endSession();
       }
@@ -86,7 +96,9 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
     const statuses = await FormSubmissionStatus.find({
       organizationId: form.organizationId,
       formId: form._id,
-    }).sort({ order: 1, _id: 1 }).lean();
+    })
+      .sort({ order: 1, _id: 1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -120,8 +132,12 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
     await assertEditable(form, submission);
 
     const questions = visibleQuestions(form);
-    const editableIds = new Set(questions.filter((question) => question.inputType !== "file").map((question) => question._id));
-    const fileIds = new Set(questions.filter((question) => question.inputType === "file").map((question) => question._id));
+    const editableIds = new Set(
+      questions.filter((question) => question.inputType !== "file").map((question) => question._id),
+    );
+    const fileIds = new Set(
+      questions.filter((question) => question.inputType === "file").map((question) => question._id),
+    );
     if (Object.keys(input.data.formAnswers).some((id) => !editableIds.has(id))) {
       throw badRequest("An answer does not belong to a visible non-file question.");
     }
@@ -130,12 +146,15 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
       Object.entries(submission.answers).filter(([id]) => fileIds.has(id)),
     );
     const answers = { ...input.data.formAnswers, ...files };
-    const updated = await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submissionStatusId: submission.submissionStatusId,
-        submittedAt: submission.submittedAt },
+    const updated = (await FormSubmission.findOneAndUpdate(
+      {
+        _id: submission._id,
+        submissionStatusId: submission.submissionStatusId,
+        submittedAt: submission.submittedAt,
+      },
       { $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers } },
       { returnDocument: "after", runValidators: true },
-    ).lean() as Submission | null;
+    ).lean()) as Submission | null;
     if (!updated) throw conflict("This submission changed while saving. Reload it and try again.");
 
     return res.status(200).json({ success: true, data: submissionData(updated) });

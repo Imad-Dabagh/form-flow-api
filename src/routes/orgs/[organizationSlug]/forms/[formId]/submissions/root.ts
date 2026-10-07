@@ -21,16 +21,26 @@ router.get<{ formId: string }>(
   validate({
     params: z.object({ formId: formIdSchema }),
     query: z.object({
-      page: z.string().refine((value) => /^[1-9]\d*$/.test(value)
-        && Number.isSafeInteger(Number(value))
-        && (Number(value) - 1) * PAGE_SIZE <= Number.MAX_SAFE_INTEGER, {
-        message: "page must be a positive integer.",
-      }).optional(),
+      page: z
+        .string()
+        .refine(
+          (value) =>
+            /^[1-9]\d*$/.test(value) &&
+            Number.isSafeInteger(Number(value)) &&
+            (Number(value) - 1) * PAGE_SIZE <= Number.MAX_SAFE_INTEGER,
+          {
+            message: "page must be a positive integer.",
+          },
+        )
+        .optional(),
       search: z.string().trim().max(100).optional(),
       status: z.enum(["all", "submitted", "started"]).optional(),
-      submissionStatusId: z.string().refine(mongoose.isValidObjectId, {
-        message: "A valid submission status ID is required.",
-      }).optional(),
+      submissionStatusId: z
+        .string()
+        .refine(mongoose.isValidObjectId, {
+          message: "A valid submission status ID is required.",
+        })
+        .optional(),
       sort: z.enum(["newest", "oldest"]).optional(),
       dateFrom: z.iso.datetime().optional(),
       dateBefore: z.iso.datetime().optional(),
@@ -41,7 +51,8 @@ router.get<{ formId: string }>(
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
       const form = await Form.findOne({ _id: formId, organizationId, archivedAt: null })
-        .select("type").lean();
+        .select("type")
+        .lean();
       if (!form) throw notFound("Form");
       const page = Number(req.query.page ?? 1);
       const status = req.query.status ?? "submitted";
@@ -57,14 +68,21 @@ router.get<{ formId: string }>(
       const scope = {
         formId: new mongoose.Types.ObjectId(formId),
         organizationId: new mongoose.Types.ObjectId(organizationId),
-        ...(status === "submitted" ? { submittedAt: { $ne: null } }
-          : status === "started" ? { submittedAt: null } : {}),
-        ...(req.query.submissionStatusId ? {
-          submissionStatusId: new mongoose.Types.ObjectId(String(req.query.submissionStatusId)),
-        } : {}),
-        ...(searchTerm ? {
-          searchKeywords: new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-        } : {}),
+        ...(status === "submitted"
+          ? { submittedAt: { $ne: null } }
+          : status === "started"
+            ? { submittedAt: null }
+            : {}),
+        ...(req.query.submissionStatusId
+          ? {
+              submissionStatusId: new mongoose.Types.ObjectId(String(req.query.submissionStatusId)),
+            }
+          : {}),
+        ...(searchTerm
+          ? {
+              searchKeywords: new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+            }
+          : {}),
       };
       const dateScope = {
         ...(req.query.dateFrom ? { $gte: new Date(String(req.query.dateFrom)) } : {}),
@@ -84,24 +102,35 @@ router.get<{ formId: string }>(
         { $match: scope },
         { $addFields: { sortAt: { $ifNull: ["$submittedAt", "$createdAt"] } } },
         ...(Object.keys(dateScope).length ? [{ $match: { sortAt: dateScope } }] : []),
-        { $facet: {
-          items: [
-            { $sort: { sortAt: direction, _id: direction } },
-            { $skip: (page - 1) * PAGE_SIZE },
-            { $limit: PAGE_SIZE },
-            { $project: { submittedAt: 1, createdAt: 1, submittedBy: 1, submissionStatusId: 1, answers: 1 } },
-          ],
-          count: [{ $count: "value" }],
-        } },
+        {
+          $facet: {
+            items: [
+              { $sort: { sortAt: direction, _id: direction } },
+              { $skip: (page - 1) * PAGE_SIZE },
+              { $limit: PAGE_SIZE },
+              {
+                $project: {
+                  submittedAt: 1,
+                  createdAt: 1,
+                  submittedBy: 1,
+                  submissionStatusId: 1,
+                  answers: 1,
+                },
+              },
+            ],
+            count: [{ $count: "value" }],
+          },
+        },
       ]);
       const submissions = result.items;
       const total = result.count[0]?.value ?? 0;
       const userIds = submissions.flatMap((submission) =>
-        submission.submittedBy ? [submission.submittedBy] : []);
+        submission.submittedBy ? [submission.submittedBy] : [],
+      );
       const users = userIds.length
         ? await User.find({ _id: { $in: userIds } })
-          .select("_id firstName lastName email profilePic")
-          .lean()
+            .select("_id firstName lastName email profilePic")
+            .lean()
         : [];
       const usersById = new Map(users.map((user) => [String(user._id), user]));
 
@@ -110,26 +139,26 @@ router.get<{ formId: string }>(
         data: {
           items: submissions.map((submission) => {
             const user = submission.submittedBy
-              ? usersById.get(String(submission.submittedBy)) : null;
-            const name = user
-              ? [user.firstName, user.lastName].filter(Boolean).join(" ")
-              : "";
+              ? usersById.get(String(submission.submittedBy))
+              : null;
+            const name = user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "";
 
             return {
               id: String(submission._id),
               submittedAt: submission.submittedAt,
               startedAt: submission.createdAt,
               submissionStatusId: submission.submissionStatusId
-                ? String(submission.submissionStatusId) : null,
+                ? String(submission.submissionStatusId)
+                : null,
               submittedBy: !submission.submittedBy
                 ? { kind: "anonymous" }
                 : user
                   ? {
-                    kind: "user",
-                    name: name || user.email,
-                    email: user.email,
-                    profilePic: user.profilePic || null,
-                  }
+                      kind: "user",
+                      name: name || user.email,
+                      email: user.email,
+                      profilePic: user.profilePic || null,
+                    }
                   : { kind: "former-user" },
               answers: toAnswersData(submission.answers),
             };
@@ -155,23 +184,36 @@ function sanitizeSearchTerm(term: string): string | null {
   if (!domainPart?.trim()) return localPart || null;
 
   const genericDomains = [
-    "@gmail.com", "@yahoo.com", "@outlook.com", "@hotmail.com", "@aol.com", "@icloud.com",
+    "@gmail.com",
+    "@yahoo.com",
+    "@outlook.com",
+    "@hotmail.com",
+    "@aol.com",
+    "@icloud.com",
   ];
   if (genericDomains.some((domain) => cleaned.endsWith(domain))) return localPart || null;
   return domainPart.split(".")[0] || null;
 }
 
 function toAnswersData(answers: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(answers).map(([questionId, value]) => [
-    questionId,
-    Array.isArray(value) ? value.map((item) =>
-      typeof item === "object" && item !== null && "url" in item && typeof item.url === "string"
-        ? {
-          name: (item as StoredFileMetadata).originalName,
-          url: item.url,
-          mimeType: (item as StoredFileMetadata).mimeType,
-          size: (item as StoredFileMetadata).size,
-        }
-        : item) : value,
-  ]));
+  return Object.fromEntries(
+    Object.entries(answers).map(([questionId, value]) => [
+      questionId,
+      Array.isArray(value)
+        ? value.map((item) =>
+            typeof item === "object" &&
+            item !== null &&
+            "url" in item &&
+            typeof item.url === "string"
+              ? {
+                  name: (item as StoredFileMetadata).originalName,
+                  url: item.url,
+                  mimeType: (item as StoredFileMetadata).mimeType,
+                  size: (item as StoredFileMetadata).size,
+                }
+              : item,
+          )
+        : value,
+    ]),
+  );
 }

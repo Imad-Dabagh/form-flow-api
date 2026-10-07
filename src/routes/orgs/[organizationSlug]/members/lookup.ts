@@ -39,7 +39,9 @@ router.get(
           email,
           status: "PENDING",
           expiresAt: { $gt: new Date() },
-        }).select("role").lean();
+        })
+          .select("role")
+          .lean();
         if (pending) {
           return res.status(200).json({
             success: true,
@@ -56,7 +58,9 @@ router.get(
         ? await Membership.findOne({
             organizationId: req.organizationAccess!.organizationId,
             userId: user._id,
-          }).select("role").lean()
+          })
+            .select("role")
+            .lean()
         : null;
 
       return res.status(200).json({
@@ -64,7 +68,8 @@ router.get(
         data: {
           kind: "existing",
           email,
-          name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || account.name || email,
+          name:
+            [user?.firstName, user?.lastName].filter(Boolean).join(" ") || account.name || email,
           profilePic: user?.profilePic || account.image || "",
           currentRole: membership?.role ?? null,
         },

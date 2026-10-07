@@ -16,17 +16,30 @@ router.put(
   "/",
   authorize("organization.update"),
   validate({
-    body: z.strictObject({
-      name: z.string({ error: "name is required." }).trim()
-        .min(1, "name is required.")
-        .max(50, "name must be 50 characters or fewer.").optional(),
-      logo: httpsUrlSchema("logo").optional(),
-      primaryColor: primaryColorSchema.nullish(),
-      slogan: z.string({ error: "slogan must be a string." }).trim()
-        .max(120, "slogan must be 120 characters or fewer.").optional(),
-      shortDescription: z.string({ error: "shortDescription must be a string." }).trim()
-        .max(500, "shortDescription must be 500 characters or fewer.").optional(),
-    }, { error: "Only name, logo, primaryColor, slogan, and shortDescription can be updated." })
+    body: z
+      .strictObject(
+        {
+          name: z
+            .string({ error: "name is required." })
+            .trim()
+            .min(1, "name is required.")
+            .max(50, "name must be 50 characters or fewer.")
+            .optional(),
+          logo: httpsUrlSchema("logo").optional(),
+          primaryColor: primaryColorSchema.nullish(),
+          slogan: z
+            .string({ error: "slogan must be a string." })
+            .trim()
+            .max(120, "slogan must be 120 characters or fewer.")
+            .optional(),
+          shortDescription: z
+            .string({ error: "shortDescription must be a string." })
+            .trim()
+            .max(500, "shortDescription must be 500 characters or fewer.")
+            .optional(),
+        },
+        { error: "Only name, logo, primaryColor, slogan, and shortDescription can be updated." },
+      )
       .refine((body) => Object.keys(body).length > 0, {
         message: "Only name, logo, primaryColor, slogan, and shortDescription can be updated.",
       }),

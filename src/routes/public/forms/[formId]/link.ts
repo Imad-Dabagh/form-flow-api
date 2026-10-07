@@ -16,10 +16,9 @@ router.get(
       formId: z.string().refine(mongoose.isValidObjectId, "A valid form ID is required."),
     }),
     query: z.object({
-      organizationSlug: z.string().regex(
-        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-        "A valid organization slug is required.",
-      ),
+      organizationSlug: z
+        .string()
+        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "A valid organization slug is required."),
     }),
   }),
   async (req, res, next) => {
@@ -29,7 +28,9 @@ router.get(
         _id: req.params.formId,
         organizationId: organization.organizationId,
         archivedAt: null,
-      }).select("type").lean();
+      })
+        .select("type")
+        .lean();
       if (!form) throw notFound("Form");
 
       res.set("Cache-Control", "no-store");

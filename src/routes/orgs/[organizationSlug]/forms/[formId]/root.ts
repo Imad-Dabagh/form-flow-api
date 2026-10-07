@@ -123,12 +123,14 @@ router.put(
           organizationId: req.organizationAccess!.organizationId,
           archivedAt: null,
         },
-        { $set: {
-          name: req.body.name.trim(),
-          type: req.body.type,
-          displayMode: req.body.displayMode,
-          isClosed: req.body.isClosed,
-        } },
+        {
+          $set: {
+            name: req.body.name.trim(),
+            type: req.body.type,
+            displayMode: req.body.displayMode,
+            isClosed: req.body.isClosed,
+          },
+        },
         { new: true, runValidators: true },
       ).select("name type displayMode isClosed updatedAt");
       if (!form) throw notFound("Form");
@@ -196,11 +198,15 @@ router.post(
         _id: req.params.formId,
         organizationId: req.organizationAccess!.organizationId,
         archivedAt: null,
-      }).select("organizationId isClosed sections").lean();
+      })
+        .select("organizationId isClosed sections")
+        .lean();
       if (!form) throw notFound("Form");
       const file = await uploadQuestionFile({ request: req, form, questionId });
       return res.status(201).json({ success: true, data: file });
-    } catch (error) { return next(error); }
+    } catch (error) {
+      return next(error);
+    }
   },
 );
 

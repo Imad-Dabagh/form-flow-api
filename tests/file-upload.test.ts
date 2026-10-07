@@ -1,9 +1,6 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import {
-  createStoredFileName,
-  prepareUploadStream,
-} from "../src/modules/file-upload/index.js";
+import { createStoredFileName, prepareUploadStream } from "../src/modules/file-upload/index.js";
 
 describe("generic file uploads", () => {
   it("creates readable collision-resistant file names", () => {
@@ -15,9 +12,7 @@ describe("generic file uploads", () => {
   it("rejects video uploads before calling storage", async () => {
     const stream = Readable.from([Buffer.from("not-a-video")]);
 
-    await expect(
-      prepareUploadStream(stream, "recording.mp4", "video/mp4"),
-    ).rejects.toMatchObject({
+    await expect(prepareUploadStream(stream, "recording.mp4", "video/mp4")).rejects.toMatchObject({
       statusCode: 415,
       code: "UNSUPPORTED_MEDIA_TYPE",
     });
@@ -26,9 +21,7 @@ describe("generic file uploads", () => {
   it("rejects dangerous executable extensions", async () => {
     const stream = Readable.from([Buffer.from("echo unsafe")]);
 
-    await expect(
-      prepareUploadStream(stream, "script.sh", "text/plain"),
-    ).rejects.toMatchObject({
+    await expect(prepareUploadStream(stream, "script.sh", "text/plain")).rejects.toMatchObject({
       statusCode: 415,
       code: "UNSUPPORTED_MEDIA_TYPE",
     });

@@ -59,67 +59,88 @@ router.get("/", authenticate, async (req, res, next) => {
 /**
  * PUT /api/me
  */
-router.put("/", authenticate, validate({
-  body: z.strictObject({
-    firstName: z.string({ error: "firstName is required." }).trim()
-      .min(1, "firstName is required.")
-      .max(50, "firstName must be 50 characters or fewer."),
-    lastName: z.string({ error: "lastName is required." }).trim()
-      .min(1, "lastName is required.")
-      .max(50, "lastName must be 50 characters or fewer."),
-    profilePic: httpsUrlSchema("profilePic").optional(),
-    coverPhoto: httpsUrlSchema("coverPhoto").optional(),
-    phone: z.string({ error: "phone must be a string." }).trim()
-      .max(30, "phone must be 30 characters or fewer.").optional(),
-    shortDescription: z.string({ error: "shortDescription must be a string." }).trim()
-      .max(500, "shortDescription must be 500 characters or fewer.").optional(),
-  }, { error: "Only firstName, lastName, profilePic, coverPhoto, phone, and shortDescription can be updated." }),
-}), async (req, res, next) => {
-  try {
-    const body = req.body;
-    const firstName = body.firstName.trim();
-    const lastName = body.lastName.trim();
-    const profilePic = body.profilePic?.trim();
-    const coverPhoto = body.coverPhoto?.trim();
-    const phone = body.phone?.trim();
-    const shortDescription = body.shortDescription?.trim();
-    const user = await User.findById(req.auth!.userId);
+router.put(
+  "/",
+  authenticate,
+  validate({
+    body: z.strictObject(
+      {
+        firstName: z
+          .string({ error: "firstName is required." })
+          .trim()
+          .min(1, "firstName is required.")
+          .max(50, "firstName must be 50 characters or fewer."),
+        lastName: z
+          .string({ error: "lastName is required." })
+          .trim()
+          .min(1, "lastName is required.")
+          .max(50, "lastName must be 50 characters or fewer."),
+        profilePic: httpsUrlSchema("profilePic").optional(),
+        coverPhoto: httpsUrlSchema("coverPhoto").optional(),
+        phone: z
+          .string({ error: "phone must be a string." })
+          .trim()
+          .max(30, "phone must be 30 characters or fewer.")
+          .optional(),
+        shortDescription: z
+          .string({ error: "shortDescription must be a string." })
+          .trim()
+          .max(500, "shortDescription must be 500 characters or fewer.")
+          .optional(),
+      },
+      {
+        error:
+          "Only firstName, lastName, profilePic, coverPhoto, phone, and shortDescription can be updated.",
+      },
+    ),
+  }),
+  async (req, res, next) => {
+    try {
+      const body = req.body;
+      const firstName = body.firstName.trim();
+      const lastName = body.lastName.trim();
+      const profilePic = body.profilePic?.trim();
+      const coverPhoto = body.coverPhoto?.trim();
+      const phone = body.phone?.trim();
+      const shortDescription = body.shortDescription?.trim();
+      const user = await User.findById(req.auth!.userId);
 
-    if (!user) {
-      throw unauthenticated();
-    }
+      if (!user) {
+        throw unauthenticated();
+      }
 
-    user.firstName = firstName;
-    user.lastName = lastName;
-    if (profilePic !== undefined) {
-      user.profilePic = profilePic;
-    }
-    if (coverPhoto !== undefined) {
-      user.coverPhoto = coverPhoto;
-    }
-    if (phone !== undefined) {
-      user.phone = phone;
-    }
-    if (shortDescription !== undefined) {
-      user.shortDescription = shortDescription;
-    }
-    const hasOrganization = await Membership.exists({
-      userId: req.auth!.userId,
-    });
+      user.firstName = firstName;
+      user.lastName = lastName;
+      if (profilePic !== undefined) {
+        user.profilePic = profilePic;
+      }
+      if (coverPhoto !== undefined) {
+        user.coverPhoto = coverPhoto;
+      }
+      if (phone !== undefined) {
+        user.phone = phone;
+      }
+      if (shortDescription !== undefined) {
+        user.shortDescription = shortDescription;
+      }
+      const hasOrganization = await Membership.exists({
+        userId: req.auth!.userId,
+      });
 
-    if (hasOrganization) {
-      user.onboardingCompletedAt ??= new Date();
+      if (hasOrganization) {
+        user.onboardingCompletedAt ??= new Date();
+      }
+
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        data: toProfileResponse(user, req.auth!),
+      });
+    } catch (error) {
+      return next(error);
     }
-
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      data: toProfileResponse(user, req.auth!),
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
+  },
+);
 
 export default router;

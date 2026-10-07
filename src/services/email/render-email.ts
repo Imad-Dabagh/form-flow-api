@@ -37,9 +37,10 @@ export function organizationBrand(input: {
 }): EmailBrand {
   const name = input.name.replace(/\s+/g, " ").trim() || "Organization";
   const color = input.primaryColor;
-  const accent = color && Object.prototype.hasOwnProperty.call(organizationAccents, color)
-    ? organizationAccents[color as OrganizationPrimaryColor]
-    : organizationAccents.blue;
+  const accent =
+    color && Object.prototype.hasOwnProperty.call(organizationAccents, color)
+      ? organizationAccents[color as OrganizationPrimaryColor]
+      : organizationAccents.blue;
 
   let logoUrl: string | undefined;
   if (input.logo) {

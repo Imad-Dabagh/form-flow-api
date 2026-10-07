@@ -31,7 +31,11 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
       next();
     },
     organizationAccess: (
-      req: { organization: unknown; organizationAccess?: unknown; params: { organizationSlug: string } },
+      req: {
+        organization: unknown;
+        organizationAccess?: unknown;
+        params: { organizationSlug: string };
+      },
       _res: unknown,
       next: () => void,
     ) => {
@@ -52,12 +56,19 @@ import Organization from "../src/modules/organization/models/index.js";
 const app = express();
 app.use(express.json());
 app.use("/api/orgs", organizationRoutes);
-app.use((error: { statusCode?: number; code?: string; message?: string }, _req: unknown, res: express.Response, _next: unknown) => {
-  res.status(error.statusCode ?? 500).json({
-    code: error.code ?? "INTERNAL_ERROR",
-    message: error.message,
-  });
-});
+app.use(
+  (
+    error: { statusCode?: number; code?: string; message?: string },
+    _req: unknown,
+    res: express.Response,
+    _next: unknown,
+  ) => {
+    res.status(error.statusCode ?? 500).json({
+      code: error.code ?? "INTERNAL_ERROR",
+      message: error.message,
+    });
+  },
+);
 
 let mongo: MongoMemoryServer;
 
@@ -96,12 +107,17 @@ afterAll(async () => {
 describe("organization invitation management", () => {
   it("lists this organization's active and expired invitations without exposing tokens", async () => {
     await createInvitation({ email: "active@example.com" });
-    await createInvitation({ email: "expired@example.com", expiresAt: new Date(Date.now() - 86_400_000) });
+    await createInvitation({
+      email: "expired@example.com",
+      expiresAt: new Date(Date.now() - 86_400_000),
+    });
     await createInvitation({ email: "canceled@example.com", status: "CANCELLED" });
     await createInvitation({ email: "other@example.com", organizationId: organizationIds.beta });
 
     const response = await request(app).get("/api/orgs/alpha/invitations").expect(200);
-    const byEmail = new Map(response.body.data.map((item: { email: string }) => [item.email, item]));
+    const byEmail = new Map(
+      response.body.data.map((item: { email: string }) => [item.email, item]),
+    );
 
     expect([...byEmail.keys()].sort()).toEqual(["active@example.com", "expired@example.com"]);
     expect(byEmail.get("active@example.com")).toMatchObject({ status: "PENDING", role: "MANAGER" });
@@ -111,8 +127,14 @@ describe("organization invitation management", () => {
 
   it("cancels only an active invitation in the current organization", async () => {
     const own = await createInvitation({ email: "own@example.com" });
-    const other = await createInvitation({ email: "other@example.com", organizationId: organizationIds.beta });
-    const expired = await createInvitation({ email: "expired@example.com", expiresAt: new Date(Date.now() - 86_400_000) });
+    const other = await createInvitation({
+      email: "other@example.com",
+      organizationId: organizationIds.beta,
+    });
+    const expired = await createInvitation({
+      email: "expired@example.com",
+      expiresAt: new Date(Date.now() - 86_400_000),
+    });
 
     await request(app).delete(`/api/orgs/alpha/invitations/${other.id}`).expect(404);
     await request(app).delete(`/api/orgs/alpha/invitations/${expired.id}`).expect(404);
@@ -132,14 +154,19 @@ describe("organization request validation", () => {
   it("keeps null primaryColor as the default blue on updates", async () => {
     await Organization.create({ _id: organizationIds.alpha, name: "Alpha", slug: "alpha" });
 
-    const response = await request(app).put("/api/orgs/alpha")
-      .send({ primaryColor: null }).expect(200);
+    const response = await request(app)
+      .put("/api/orgs/alpha")
+      .send({ primaryColor: null })
+      .expect(200);
 
     expect(response.body.data.primaryColor).toBe("blue");
   });
 
   it("keeps body, query, and path errors as bad requests", async () => {
-    const invalidSlug = await request(app).post("/api/orgs").send({ name: "Acme", slug: "bad_slug" }).expect(400);
+    const invalidSlug = await request(app)
+      .post("/api/orgs")
+      .send({ name: "Acme", slug: "bad_slug" })
+      .expect(400);
     expect(invalidSlug.body).toMatchObject({
       code: "BAD_REQUEST",
       message: "slug must use lowercase letters, numbers, and single hyphens only.",
@@ -153,11 +180,15 @@ describe("organization request validation", () => {
     const missingEmail = await request(app).get("/api/orgs/alpha/members/lookup").expect(400);
     expect(missingEmail.body.message).toBe("A valid email is required.");
 
-    const invalidMemberId = await request(app).put("/api/orgs/alpha/members/not-an-id")
-      .send({ role: "ADMIN" }).expect(400);
+    const invalidMemberId = await request(app)
+      .put("/api/orgs/alpha/members/not-an-id")
+      .send({ role: "ADMIN" })
+      .expect(400);
     expect(invalidMemberId.body.message).toBe("A valid membership ID is required.");
 
-    const invalidInvitationId = await request(app).delete("/api/orgs/alpha/invitations/not-an-id").expect(400);
+    const invalidInvitationId = await request(app)
+      .delete("/api/orgs/alpha/invitations/not-an-id")
+      .expect(400);
     expect(invalidInvitationId.body.message).toBe("A valid invitation ID is required.");
   });
 

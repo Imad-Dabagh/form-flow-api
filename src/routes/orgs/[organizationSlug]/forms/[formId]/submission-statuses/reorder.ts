@@ -19,9 +19,13 @@ router.put(
       }),
     }),
     body: z.strictObject({
-      statusIds: z.array(z.string().refine(mongoose.isValidObjectId, {
-        message: "A valid submission status ID is required.",
-      })).min(1),
+      statusIds: z
+        .array(
+          z.string().refine(mongoose.isValidObjectId, {
+            message: "A valid submission status ID is required.",
+          }),
+        )
+        .min(1),
     }),
   }),
   async (req, res, next) => {
@@ -37,20 +41,28 @@ router.put(
         );
         if (form.matchedCount !== 1) throw notFound("Form");
         const existing = await FormSubmissionStatus.find({ organizationId, formId })
-          .session(session).lean();
+          .session(session)
+          .lean();
         const statusIds: string[] = req.body.statusIds;
         const existingById = new Map(existing.map((status) => [String(status._id), status]));
-        if (statusIds.length !== existing.length
-          || new Set(statusIds).size !== statusIds.length
-          || statusIds.some((id) => !existingById.has(id))) {
-          throw badRequest("statusIds must contain every submission status for this form exactly once.");
+        if (
+          statusIds.length !== existing.length ||
+          new Set(statusIds).size !== statusIds.length ||
+          statusIds.some((id) => !existingById.has(id))
+        ) {
+          throw badRequest(
+            "statusIds must contain every submission status for this form exactly once.",
+          );
         }
-        await FormSubmissionStatus.bulkWrite(statusIds.map((id, index) => ({
-          updateOne: {
-            filter: { organizationId, formId, _id: id },
-            update: { $set: { order: index + 1 } },
-          },
-        })), { session });
+        await FormSubmissionStatus.bulkWrite(
+          statusIds.map((id, index) => ({
+            updateOne: {
+              filter: { organizationId, formId, _id: id },
+              update: { $set: { order: index + 1 } },
+            },
+          })),
+          { session },
+        );
         return statusIds.map((id, index) => ({ ...existingById.get(id)!, order: index + 1 }));
       });
       if (!statuses) throw internalError();

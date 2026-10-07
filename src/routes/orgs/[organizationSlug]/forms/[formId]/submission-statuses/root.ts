@@ -33,9 +33,7 @@ router.get<{ formId: string }>(
       if (!form) throw notFound("Form");
 
       const [statuses, counts] = await Promise.all([
-        FormSubmissionStatus.find({ organizationId, formId })
-          .sort({ order: 1, _id: 1 })
-          .lean(),
+        FormSubmissionStatus.find({ organizationId, formId }).sort({ order: 1, _id: 1 }).lean(),
         FormSubmission.aggregate<{
           _id: mongoose.Types.ObjectId;
           count: number;
@@ -51,9 +49,7 @@ router.get<{ formId: string }>(
         ]),
       ]);
 
-      const countsById = new Map(
-        counts.map(({ _id, count }) => [String(_id), count]),
-      );
+      const countsById = new Map(counts.map(({ _id, count }) => [String(_id), count]));
 
       return res.status(200).json({
         success: true,
@@ -68,7 +64,6 @@ router.get<{ formId: string }>(
           submissionCount: countsById.get(String(status._id)) ?? 0,
         })),
       });
-
     } catch (error) {
       return next(error);
     }

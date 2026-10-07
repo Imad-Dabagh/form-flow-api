@@ -18,12 +18,17 @@ router.get(
   authorize("form.read"),
   validate({
     query: z.object({
-      page: z.string()
-        .refine((value) => /^[1-9]\d*$/.test(value)
-          && Number.isSafeInteger(Number(value))
-          && (Number(value) - 1) * PAGE_SIZE <= Number.MAX_SAFE_INTEGER, {
-          message: "page must be a positive integer.",
-        })
+      page: z
+        .string()
+        .refine(
+          (value) =>
+            /^[1-9]\d*$/.test(value) &&
+            Number.isSafeInteger(Number(value)) &&
+            (Number(value) - 1) * PAGE_SIZE <= Number.MAX_SAFE_INTEGER,
+          {
+            message: "page must be a positive integer.",
+          },
+        )
         .optional(),
       search: z.string().trim().max(100).optional(),
       type: z.enum(FORM_TYPES).optional(),
@@ -87,7 +92,9 @@ router.post(
   authorize("form.create"),
   validate({
     body: z.strictObject({
-      name: z.string({ error: "name is required." }).trim()
+      name: z
+        .string({ error: "name is required." })
+        .trim()
         .min(1, "name is required.")
         .max(100, "name must be 100 characters or fewer."),
       type: z.enum(FORM_TYPES),
@@ -100,14 +107,19 @@ router.post(
 
     try {
       const form = await session.withTransaction(async () => {
-        const [createdForm] = await Form.create([{
-          organizationId: req.organizationAccess!.organizationId,
-          createdBy: req.auth!.userId,
-          name: req.body.name.trim(),
-          type: req.body.type,
-          displayMode: req.body.displayMode,
-          isClosed: req.body.isClosed,
-        }], { session });
+        const [createdForm] = await Form.create(
+          [
+            {
+              organizationId: req.organizationAccess!.organizationId,
+              createdBy: req.auth!.userId,
+              name: req.body.name.trim(),
+              type: req.body.type,
+              displayMode: req.body.displayMode,
+              isClosed: req.body.isClosed,
+            },
+          ],
+          { session },
+        );
 
         await FormSubmissionStatus.insertMany(
           DEFAULT_FORM_SUBMISSION_STATUSES.map((status) => ({

@@ -52,10 +52,7 @@ const organizationAccess: RequestHandler = async (req, _res, next) => {
   }
 
   try {
-    req.organizationAccess = await resolveOrganizationAccess(
-      req.auth,
-      req.organization,
-    );
+    req.organizationAccess = await resolveOrganizationAccess(req.auth, req.organization);
 
     if (req.organizationAccess.isSuperAdmin) {
       AsyncHook.updateRequestContext({ isSuperAdmin: true });

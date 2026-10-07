@@ -32,16 +32,22 @@ const formSubmissionSchema = new mongoose.Schema(
 
 formSubmissionSchema.index({ formId: 1, submittedAt: -1, _id: -1 });
 formSubmissionSchema.index({ formId: 1, submissionStatusId: 1 });
-formSubmissionSchema.index({ formId: 1, submittedBy: 1 }, {
-  unique: true,
-  partialFilterExpression: { submittedBy: { $type: "objectId" } },
-});
-formSubmissionSchema.index({ formId: 1, idempotencyKey: 1 }, {
-  unique: true,
-  partialFilterExpression: { idempotencyKey: { $type: "string" } },
-});
+formSubmissionSchema.index(
+  { formId: 1, submittedBy: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { submittedBy: { $type: "objectId" } },
+  },
+);
+formSubmissionSchema.index(
+  { formId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  },
+);
 
-const FormSubmission = mongoose.models.FormSubmission
-  ?? mongoose.model("FormSubmission", formSubmissionSchema);
+const FormSubmission =
+  mongoose.models.FormSubmission ?? mongoose.model("FormSubmission", formSubmissionSchema);
 
 export default FormSubmission;

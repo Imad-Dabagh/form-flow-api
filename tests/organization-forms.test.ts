@@ -27,7 +27,11 @@ vi.mock("../src/middlewares/index.js", async (importOriginal) => {
       next();
     },
     organizationAccess: (
-      req: { organization: unknown; organizationAccess?: unknown; params: { organizationSlug: string } },
+      req: {
+        organization: unknown;
+        organizationAccess?: unknown;
+        params: { organizationSlug: string };
+      },
       _res: unknown,
       next: () => void,
     ) => {
@@ -50,9 +54,18 @@ import User from "../src/modules/user/models/index.js";
 const app = express();
 app.use(express.json());
 app.use("/api/orgs", organizationRoutes);
-app.use((error: { statusCode?: number; code?: string; message?: string }, _req: unknown, res: express.Response, _next: unknown) => {
-  res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR", message: error.message });
-});
+app.use(
+  (
+    error: { statusCode?: number; code?: string; message?: string },
+    _req: unknown,
+    res: express.Response,
+    _next: unknown,
+  ) => {
+    res
+      .status(error.statusCode ?? 500)
+      .json({ code: error.code ?? "INTERNAL_ERROR", message: error.message });
+  },
+);
 
 let mongo: MongoMemoryReplSet;
 
@@ -87,20 +100,24 @@ afterAll(async () => {
 
 describe("organization forms", () => {
   it("creates a blank form in the current organization", async () => {
-    const response = await request(app).post("/api/orgs/alpha/forms")
+    const response = await request(app)
+      .post("/api/orgs/alpha/forms")
       .send({
         name: "  Customer feedback  ",
         type: "PUBLIC",
         displayMode: "SINGLE_PAGE",
         isClosed: false,
-      }).expect(201);
+      })
+      .expect(201);
 
     expect(response.body.data).toMatchObject({ name: "Customer feedback" });
     const form = await Form.findById(response.body.data.id);
     expect(String(form?.organizationId)).toBe(alphaId);
     expect(String(form?.createdBy)).toBe(userId);
     expect(form?.sections).toEqual([]);
-    const statuses = await FormSubmissionStatus.find({ formId: form?._id }).sort({ order: 1 }).lean();
+    const statuses = await FormSubmissionStatus.find({ formId: form?._id })
+      .sort({ order: 1 })
+      .lean();
     expect(statuses).toMatchObject([
       { name: "Pending", color: "orange", order: 1, isDefault: true, isSubmissionLocked: false },
       { name: "In review", color: "indigo", order: 2, isDefault: false, isSubmissionLocked: false },
@@ -113,7 +130,12 @@ describe("organization forms", () => {
   it("lists only active forms in the current organization with stable pagination", async () => {
     await Form.create({ organizationId: alphaId, createdBy: userId, name: "Alpha" });
     await Form.create({ organizationId: betaId, createdBy: userId, name: "Beta" });
-    await Form.create({ organizationId: alphaId, createdBy: userId, name: "Archived", archivedAt: new Date() });
+    await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Archived",
+      archivedAt: new Date(),
+    });
 
     const response = await request(app).get("/api/orgs/alpha/forms").expect(200);
     expect(response.body.data).toMatchObject({ total: 1, page: 1, pageSize: 20 });
@@ -121,35 +143,51 @@ describe("organization forms", () => {
   });
 
   it("returns the second page without repeating forms", async () => {
-    await Form.insertMany(Array.from({ length: 21 }, (_, index) => ({
-      organizationId: alphaId,
-      createdBy: userId,
-      name: `Form ${index + 1}`,
-    })));
+    await Form.insertMany(
+      Array.from({ length: 21 }, (_, index) => ({
+        organizationId: alphaId,
+        createdBy: userId,
+        name: `Form ${index + 1}`,
+      })),
+    );
 
     const first = await request(app).get("/api/orgs/alpha/forms").expect(200);
     const second = await request(app).get("/api/orgs/alpha/forms?page=2").expect(200);
     expect(first.body.data).toMatchObject({ total: 21, page: 1, pageSize: 20 });
     expect(first.body.data.items).toHaveLength(20);
     expect(second.body.data.items).toHaveLength(1);
-    expect(first.body.data.items.map((form: { id: string }) => form.id))
-      .not.toContain(second.body.data.items[0].id);
+    expect(first.body.data.items.map((form: { id: string }) => form.id)).not.toContain(
+      second.body.data.items[0].id,
+    );
   });
 
   it("scopes form detail by organization and archived state", async () => {
     const own = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Own" });
     const other = await Form.create({ organizationId: betaId, createdBy: userId, name: "Other" });
-    const archived = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Archived", archivedAt: new Date() });
+    const archived = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Archived",
+      archivedAt: new Date(),
+    });
 
     const response = await request(app).get(`/api/orgs/alpha/forms/${own.id}`).expect(200);
-    expect(response.body.data).toMatchObject({ name: "Own", sections: [], displayMode: "SINGLE_PAGE", isClosed: false });
+    expect(response.body.data).toMatchObject({
+      name: "Own",
+      sections: [],
+      displayMode: "SINGLE_PAGE",
+      isClosed: false,
+    });
     await request(app).get(`/api/orgs/alpha/forms/${other.id}`).expect(404);
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}`).expect(404);
   });
 
   it("validates input and checks permission before schemas", async () => {
     await request(app).post("/api/orgs/alpha/forms").send({ name: " " }).expect(400);
-    await request(app).post("/api/orgs/alpha/forms").send({ name: "Good", isClosed: false }).expect(400);
+    await request(app)
+      .post("/api/orgs/alpha/forms")
+      .send({ name: "Good", isClosed: false })
+      .expect(400);
     await request(app).get("/api/orgs/alpha/forms?page=0").expect(400);
     await request(app).get("/api/orgs/alpha/forms/not-an-id").expect(400);
     await request(app).post("/api/orgs/member/forms").send({ name: " " }).expect(403);
@@ -159,7 +197,12 @@ describe("organization forms", () => {
   it("lists submissions only for an accessible active form", async () => {
     const own = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Own" });
     const other = await Form.create({ organizationId: betaId, createdBy: userId, name: "Other" });
-    const archived = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Archived", archivedAt: new Date() });
+    const archived = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Archived",
+      archivedAt: new Date(),
+    });
     const submissionStatusId = await createDefaultStatus(own.id);
     const submission = await FormSubmission.create({
       organizationId: alphaId,
@@ -176,14 +219,18 @@ describe("organization forms", () => {
       answers: {},
     });
 
-    const response = await request(app).get(`/api/orgs/alpha/forms/${own.id}/submissions`).expect(200);
+    const response = await request(app)
+      .get(`/api/orgs/alpha/forms/${own.id}/submissions`)
+      .expect(200);
     expect(response.body.data).toMatchObject({
-      items: [{
-        id: String(submission._id),
-        submittedAt: submission.submittedAt?.toISOString(),
-        submittedBy: { kind: "anonymous" },
-        answers: {},
-      }],
+      items: [
+        {
+          id: String(submission._id),
+          submittedAt: submission.submittedAt?.toISOString(),
+          submittedBy: { kind: "anonymous" },
+          answers: {},
+        },
+      ],
       total: 1,
       page: 1,
       pageSize: 20,
@@ -195,38 +242,59 @@ describe("organization forms", () => {
   });
 
   it("paginates submissions in stable newest-first order", async () => {
-    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const form = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Feedback",
+    });
     const submissionStatusId = await createDefaultStatus(form.id);
     const submittedAt = new Date("2026-01-01T12:00:00.000Z");
-    await FormSubmission.insertMany(Array.from({ length: 22 }, () => ({
-      organizationId: alphaId,
-      formId: form.id,
-      submissionStatusId,
-      answers: {},
-      createdAt: submittedAt,
-      submittedAt,
-    })));
+    await FormSubmission.insertMany(
+      Array.from({ length: 22 }, () => ({
+        organizationId: alphaId,
+        formId: form.id,
+        submissionStatusId,
+        answers: {},
+        createdAt: submittedAt,
+        submittedAt,
+      })),
+    );
 
-    const first = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
+    const first = await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .expect(200);
     expect(first.body.data).toMatchObject({ total: 22, page: 1, pageSize: 20 });
     expect(first.body.data.items).toHaveLength(20);
     const second = await request(app)
       .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
-      .query({ page: 2 }).expect(200);
+      .query({ page: 2 })
+      .expect(200);
     expect(second.body.data).toMatchObject({ total: 22, page: 2, pageSize: 20 });
     expect(second.body.data.items).toHaveLength(2);
     const beyondLast = await request(app)
       .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
-      .query({ page: 3 }).expect(200);
+      .query({ page: 3 })
+      .expect(200);
     expect(beyondLast.body.data).toMatchObject({ items: [], total: 22, page: 3, pageSize: 20 });
-    expect(new Set([...first.body.data.items, ...second.body.data.items]
-      .map((item: { id: string }) => item.id)).size).toBe(22);
-    await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`)
-      .query({ page: 0 }).expect(400);
+    expect(
+      new Set(
+        [...first.body.data.items, ...second.body.data.items].map(
+          (item: { id: string }) => item.id,
+        ),
+      ).size,
+    ).toBe(22);
+    await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .query({ page: 0 })
+      .expect(400);
   });
 
   it("filters completed submissions by stored user keywords and submitted date", async () => {
-    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const form = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Applications",
+    });
     const submissionStatusId = await createDefaultStatus(form.id);
     const first = await FormSubmission.create({
       organizationId: alphaId,
@@ -251,17 +319,29 @@ describe("organization forms", () => {
         search: "amina@gmail.com",
         dateFrom: "2026-01-02T00:00:00.000Z",
         dateBefore: "2026-01-03T00:00:00.000Z",
-      }).expect(200);
+      })
+      .expect(200);
     expect(response.body.data).toMatchObject({ total: 1, page: 1 });
     expect(response.body.data.items.map((item: { id: string }) => item.id)).toEqual([first.id]);
 
-    const publicForm = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Public", type: "PUBLIC" });
-    await request(app).get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
-      .query({ search: "amina" }).expect(400);
+    const publicForm = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Public",
+      type: "PUBLIC",
+    });
+    await request(app)
+      .get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
+      .query({ search: "amina" })
+      .expect(400);
   });
 
   it("filters started and submitted records and sorts their event dates", async () => {
-    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Applications" });
+    const form = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Applications",
+    });
     const submissionStatusId = await createDefaultStatus(form.id);
     const submitted = await FormSubmission.create({
       organizationId: alphaId,
@@ -284,25 +364,47 @@ describe("organization forms", () => {
     const url = `/api/orgs/alpha/forms/${form.id}/submissions`;
 
     const newest = await request(app).get(url).query({ status: "all" }).expect(200);
-    expect(newest.body.data.items.map((item: { id: string }) => item.id))
-      .toEqual([submitted.id, started.id]);
-    const oldest = await request(app).get(url)
-      .query({ status: "all", sort: "oldest" }).expect(200);
-    expect(oldest.body.data.items.map((item: { id: string }) => item.id))
-      .toEqual([started.id, submitted.id]);
-    const drafts = await request(app).get(url)
-      .query({ status: "started", dateFrom: "2026-01-02T00:00:00.000Z", dateBefore: "2026-01-03T00:00:00.000Z" })
+    expect(newest.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      submitted.id,
+      started.id,
+    ]);
+    const oldest = await request(app).get(url).query({ status: "all", sort: "oldest" }).expect(200);
+    expect(oldest.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      started.id,
+      submitted.id,
+    ]);
+    const drafts = await request(app)
+      .get(url)
+      .query({
+        status: "started",
+        dateFrom: "2026-01-02T00:00:00.000Z",
+        dateBefore: "2026-01-03T00:00:00.000Z",
+      })
       .expect(200);
-    expect(drafts.body.data).toMatchObject({ total: 1, items: [{ id: started.id, submittedAt: null }] });
+    expect(drafts.body.data).toMatchObject({
+      total: 1,
+      items: [{ id: started.id, submittedAt: null }],
+    });
     expect(drafts.body.data.items[0].startedAt).toBe("2026-01-02T12:00:00.000Z");
 
-    const publicForm = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Public", type: "PUBLIC" });
-    await request(app).get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
-      .query({ status: "started" }).expect(400);
+    const publicForm = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Public",
+      type: "PUBLIC",
+    });
+    await request(app)
+      .get(`/api/orgs/alpha/forms/${publicForm.id}/submissions`)
+      .query({ status: "started" })
+      .expect(400);
   });
 
   it("returns answers and limited user data without internal fields", async () => {
-    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
+    const form = await Form.create({
+      organizationId: alphaId,
+      createdBy: userId,
+      name: "Feedback",
+    });
     const submissionStatusId = await createDefaultStatus(form.id);
     const user = await User.create({
       email: "reader@example.com",
@@ -318,22 +420,26 @@ describe("organization forms", () => {
       submittedBy: user.id,
       submittedAt: new Date(),
       answers: {
-        "file-1": [{
-          id: "asset-id",
-          storageKey: "private-storage-key",
-          provider: "cloudinary",
-          url: "https://example.com/file.pdf",
-          name: "stored.pdf",
-          originalName: "answer.pdf",
-          extension: "pdf",
-          mimeType: "application/pdf",
-          size: 123,
-          createdAt: "2026-01-01T12:00:00.000Z",
-        }],
+        "file-1": [
+          {
+            id: "asset-id",
+            storageKey: "private-storage-key",
+            provider: "cloudinary",
+            url: "https://example.com/file.pdf",
+            name: "stored.pdf",
+            originalName: "answer.pdf",
+            extension: "pdf",
+            mimeType: "application/pdf",
+            size: 123,
+            createdAt: "2026-01-01T12:00:00.000Z",
+          },
+        ],
       },
     });
 
-    const response = await request(app).get(`/api/orgs/alpha/forms/${form.id}/submissions`).expect(200);
+    const response = await request(app)
+      .get(`/api/orgs/alpha/forms/${form.id}/submissions`)
+      .expect(200);
     expect(response.body.data.items[0]).toMatchObject({
       submittedBy: {
         kind: "user",
@@ -341,7 +447,9 @@ describe("organization forms", () => {
         email: "reader@example.com",
         profilePic: "https://example.com/ada.jpg",
       },
-      answers: { "file-1": [{ name: "answer.pdf", url: "https://example.com/file.pdf", size: 123 }] },
+      answers: {
+        "file-1": [{ name: "answer.pdf", url: "https://example.com/file.pdf", size: 123 }],
+      },
     });
     expect(JSON.stringify(response.body.data)).not.toContain("private-key");
     expect(JSON.stringify(response.body.data)).not.toContain("private-storage-key");

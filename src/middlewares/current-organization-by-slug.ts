@@ -35,9 +35,7 @@ export async function resolveOrganizationBySlug(
 
 const currentOrganizationBySlug: RequestHandler = async (req, _res, next) => {
   try {
-    req.organization = await resolveOrganizationBySlug(
-      req.params.organizationSlug,
-    );
+    req.organization = await resolveOrganizationBySlug(req.params.organizationSlug);
 
     AsyncHook.updateRequestContext({
       currentOrganizationId: req.organization.organizationId,

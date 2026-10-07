@@ -8,6 +8,5 @@ export const authenticatedUploadRateLimit = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   keyGenerator: (req) => req.auth!.userId,
-  handler: (_req, _res, next) =>
-    next(tooManyRequests("Upload limit reached. Try again later.")),
+  handler: (_req, _res, next) => next(tooManyRequests("Upload limit reached. Try again later.")),
 });

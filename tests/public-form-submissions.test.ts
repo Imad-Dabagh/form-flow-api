@@ -16,9 +16,18 @@ const answers = { formAnswers: { "question-1": "Looks good" } };
 const app = express();
 app.use(express.json());
 app.use("/api/public/forms/:formId/submissions/submit", publicSubmit);
-app.use((error: { statusCode?: number; code?: string; message?: string }, _req: unknown, res: express.Response, _next: unknown) => {
-  res.status(error.statusCode ?? 500).json({ code: error.code ?? "INTERNAL_ERROR", message: error.message });
-});
+app.use(
+  (
+    error: { statusCode?: number; code?: string; message?: string },
+    _req: unknown,
+    res: express.Response,
+    _next: unknown,
+  ) => {
+    res
+      .status(error.statusCode ?? 500)
+      .json({ code: error.code ?? "INTERNAL_ERROR", message: error.message });
+  },
+);
 
 let mongo: MongoMemoryReplSet;
 
@@ -39,16 +48,22 @@ afterAll(async () => {
   await mongo?.stop();
 });
 
-async function createPublicForm(sections = [{
-  _id: "section-1",
-  title: "Details",
-  questions: [{
-    _id: "question-1",
-    title: "Feedback",
-    inputType: "string",
-    isRequired: true,
-  }],
-}]) {
+async function createPublicForm(
+  sections = [
+    {
+      _id: "section-1",
+      title: "Details",
+      questions: [
+        {
+          _id: "question-1",
+          title: "Feedback",
+          inputType: "string",
+          isRequired: true,
+        },
+      ],
+    },
+  ],
+) {
   const form = await Form.create({
     organizationId,
     createdBy: userId,
@@ -73,10 +88,11 @@ describe("direct form submissions", () => {
     const key = randomUUID();
     const url = `/api/public/forms/${form.id}/submissions/submit`;
     const response = await request(app)
-      .put(url).set("Idempotency-Key", key)
-      .send(answers).expect(201);
-    const retry = await request(app).put(url).set("Idempotency-Key", key)
-      .send(answers).expect(200);
+      .put(url)
+      .set("Idempotency-Key", key)
+      .send(answers)
+      .expect(201);
+    const retry = await request(app).put(url).set("Idempotency-Key", key).send(answers).expect(200);
 
     expect(retry.body.data.id).toBe(response.body.data.id);
     const record = await FormSubmission.findById(response.body.data.id).lean();
@@ -107,11 +123,9 @@ describe("direct form submissions", () => {
     const url = `/api/public/forms/${form.id}/submissions/submit`;
     const key = randomUUID();
 
-    const first = await request(app).put(url).set("Idempotency-Key", key)
-      .send(answers).expect(201);
+    const first = await request(app).put(url).set("Idempotency-Key", key).send(answers).expect(201);
     await Form.updateOne({ _id: form._id }, { isClosed: true });
-    const retry = await request(app).put(url).set("Idempotency-Key", key)
-      .send(answers).expect(200);
+    const retry = await request(app).put(url).set("Idempotency-Key", key).send(answers).expect(200);
     expect(retry.body.data.id).toBe(first.body.data.id);
     expect(await FormSubmission.countDocuments({ formId: form.id })).toBe(1);
   });
@@ -122,47 +136,64 @@ describe("direct form submissions", () => {
     const response = await request(app)
       .put(`/api/public/forms/${form.id}/submissions/submit`)
       .set("Idempotency-Key", randomUUID())
-      .send(answers).expect(409);
+      .send(answers)
+      .expect(409);
 
     expect(response.body.code).toBe("FORM_CLOSED");
     expect(await FormSubmission.countDocuments({ formId: form._id })).toBe(0);
   });
 
   it("accepts zero as a required number and rejects an invalid date", async () => {
-    const form = await createPublicForm([{
+    const form = await createPublicForm([
+      {
         _id: "section-1",
         title: "Metrics",
         questions: [
           { _id: "count", title: "Count", inputType: "number", isRequired: true },
           { _id: "date", title: "Date", inputType: "datetime", isRequired: true },
         ],
-      }]);
+      },
+    ]);
     const url = `/api/public/forms/${form.id}/submissions/submit`;
     const key = randomUUID();
 
-    await request(app).put(url).set("Idempotency-Key", key)
-      .send({ formAnswers: { count: 0, date: "2026-02-30" } }).expect(400);
-    const submitted = await request(app).put(url).set("Idempotency-Key", key)
-      .send({ formAnswers: { count: 0, date: "2026-02-28" } }).expect(201);
+    await request(app)
+      .put(url)
+      .set("Idempotency-Key", key)
+      .send({ formAnswers: { count: 0, date: "2026-02-30" } })
+      .expect(400);
+    const submitted = await request(app)
+      .put(url)
+      .set("Idempotency-Key", key)
+      .send({ formAnswers: { count: 0, date: "2026-02-28" } })
+      .expect(201);
     const record = await FormSubmission.findById(submitted.body.data.id).lean();
     expect(record?.answers.count).toBe(0);
   });
 
   it("accepts an absolute website URL and rejects other schemes or incomplete links", async () => {
-    const form = await createPublicForm([{
+    const form = await createPublicForm([
+      {
         _id: "section-1",
         title: "Links",
         questions: [{ _id: "website", title: "Portfolio URL", inputType: "url", isRequired: true }],
-      }]);
+      },
+    ]);
     const endpoint = `/api/public/forms/${form.id}/submissions/submit`;
 
     for (const website of ["example.com", "javascript:alert(1)", "ftp://example.com"]) {
-      await request(app).put(endpoint).set("Idempotency-Key", randomUUID())
-        .send({ formAnswers: { website } }).expect(400);
+      await request(app)
+        .put(endpoint)
+        .set("Idempotency-Key", randomUUID())
+        .send({ formAnswers: { website } })
+        .expect(400);
     }
 
-    const submitted = await request(app).put(endpoint).set("Idempotency-Key", randomUUID())
-      .send({ formAnswers: { website: " https://example.com/portfolio " } }).expect(201);
+    const submitted = await request(app)
+      .put(endpoint)
+      .set("Idempotency-Key", randomUUID())
+      .send({ formAnswers: { website: " https://example.com/portfolio " } })
+      .expect(201);
     const record = await FormSubmission.findById(submitted.body.data.id).lean();
     expect(record?.answers.website).toBe("https://example.com/portfolio");
   });

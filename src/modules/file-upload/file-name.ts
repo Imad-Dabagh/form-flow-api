@@ -20,10 +20,7 @@ export function getFileExtension(fileName: string): string {
   );
 }
 
-export function createStoredFileName(
-  originalName: string,
-  detectedExtension?: string,
-): string {
+export function createStoredFileName(originalName: string, detectedExtension?: string): string {
   const safeOriginalName = path.basename(originalName);
   const rawOriginalExtension = path.extname(safeOriginalName);
   const originalExtension = getFileExtension(safeOriginalName);
@@ -34,8 +31,7 @@ export function createStoredFileName(
   const rawBaseName = rawOriginalExtension
     ? safeOriginalName.slice(0, -rawOriginalExtension.length)
     : safeOriginalName;
-  const baseName =
-    normalizePart(rawBaseName).slice(0, MAX_BASE_NAME_LENGTH) || "file";
+  const baseName = normalizePart(rawBaseName).slice(0, MAX_BASE_NAME_LENGTH) || "file";
   const suffix = randomUUID().replace(/-/g, "").slice(0, 12);
 
   return `${baseName}-${suffix}${extension ? `.${extension}` : ""}`;

@@ -2,10 +2,7 @@ import busboy from "busboy";
 import type { Request } from "express";
 import type { Readable } from "node:stream";
 import { badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
-import type {
-  StorageProvider,
-  StoredFileMetadata,
-} from "#app/services/storage/index";
+import type { StorageProvider, StoredFileMetadata } from "#app/services/storage/index";
 import { createStoredFileName } from "./file-name.js";
 import { MAX_UPLOAD_BYTES, prepareUploadStream } from "./validation.js";
 import type { FormQuestionUploadPolicy } from "./policy.js";
@@ -20,7 +17,14 @@ export interface ReceiveFileOptions {
 
 export async function storeFileStream(
   source: Readable & { truncated?: boolean },
-  { tenantId, storage, policy, originalName, declaredMimeType, signal }: ReceiveFileOptions & {
+  {
+    tenantId,
+    storage,
+    policy,
+    originalName,
+    declaredMimeType,
+    signal,
+  }: ReceiveFileOptions & {
     originalName: string;
     declaredMimeType: string;
     signal?: AbortSignal;
@@ -46,9 +50,7 @@ export async function receiveFileUpload(
   const contentType = req.headers["content-type"] ?? "";
 
   if (!contentType.toLowerCase().startsWith("multipart/form-data;")) {
-    throw unsupportedMediaType(
-      "Use multipart/form-data with a single file field named 'file'.",
-    );
+    throw unsupportedMediaType("Use multipart/form-data with a single file field named 'file'.");
   }
 
   const contentLength = Number(req.headers["content-length"]);
@@ -56,9 +58,7 @@ export async function receiveFileUpload(
     Number.isFinite(contentLength) &&
     contentLength > MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
   ) {
-    throw payloadTooLarge(
-      `Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`,
-    );
+    throw payloadTooLarge(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`);
   }
 
   let parser;
@@ -89,9 +89,7 @@ export async function receiveFileUpload(
     parser.on("file", (fieldName, file, info) => {
       if (fieldName !== "file" || !info.filename || uploadTask) {
         file.resume();
-        requestError ??= badRequest(
-          "Send exactly one file using the field name 'file'.",
-        );
+        requestError ??= badRequest("Send exactly one file using the field name 'file'.");
         return;
       }
 

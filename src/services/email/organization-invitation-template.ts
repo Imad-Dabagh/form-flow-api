@@ -1,8 +1,4 @@
-import {
-  organizationBrand,
-  renderActionEmail,
-  type ActionLinkInput,
-} from "./render-email.js";
+import { organizationBrand, renderActionEmail, type ActionLinkInput } from "./render-email.js";
 
 // The organization name, color, and logo are captured when the invitation is sent.
 

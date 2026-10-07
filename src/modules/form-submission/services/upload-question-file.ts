@@ -20,14 +20,19 @@ interface UploadableForm {
 }
 
 /** Form access is resolved by the caller, so this can also serve public submissions. */
-export async function uploadQuestionFile({ request, form, questionId }: {
+export async function uploadQuestionFile({
+  request,
+  form,
+  questionId,
+}: {
   request: Request;
   form: UploadableForm;
   questionId: string;
 }) {
   if (form.isClosed) throw badRequest("This form is closed.");
 
-  const question = form.sections.flatMap((section) => section.questions)
+  const question = form.sections
+    .flatMap((section) => section.questions)
     .find((item) => item._id === questionId && item.inputType === "file");
   if (!question) throw notFound("File question");
 
@@ -38,7 +43,7 @@ export async function uploadQuestionFile({ request, form, questionId }: {
     storage: storageProvider,
     policy: {
       category,
-      allowedExtensions: category === "all" ? [] : question.typeConfig?.allowedExtensions ?? [],
+      allowedExtensions: category === "all" ? [] : (question.typeConfig?.allowedExtensions ?? []),
     },
   });
 }

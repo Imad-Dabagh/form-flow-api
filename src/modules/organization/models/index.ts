@@ -64,6 +64,7 @@ const organizationSchema = new mongoose.Schema(
 // A slug is the public URL identifier and must be unique across the platform.
 organizationSchema.index({ slug: 1 }, { unique: true });
 
-const Organization = mongoose.models.Organization ?? mongoose.model("Organization", organizationSchema);
+const Organization =
+  mongoose.models.Organization ?? mongoose.model("Organization", organizationSchema);
 
 export default Organization;

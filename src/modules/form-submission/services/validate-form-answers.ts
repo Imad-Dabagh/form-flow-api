@@ -72,11 +72,12 @@ function validateValue(question: SubmissionQuestion, value: unknown): NonFileAns
   }
 
   if (inputType === "number") {
-    const number = typeof value === "number"
-      ? value
-      : typeof value === "string" && value.trim() !== ""
-        ? Number(value)
-        : NaN;
+    const number =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim() !== ""
+          ? Number(value)
+          : NaN;
     if (!Number.isFinite(number)) invalid(question, "Enter a valid number.");
     if (validation?.min !== undefined && number < validation.min) {
       invalid(question, `Enter a number of at least ${validation.min}.`);
@@ -95,10 +96,12 @@ function validateValue(question: SubmissionQuestion, value: unknown): NonFileAns
   }
 
   if (multipleChoiceTypes.has(inputType)) {
-    if (!Array.isArray(value) ||
+    if (
+      !Array.isArray(value) ||
       value.some((item) => typeof item !== "string") ||
       new Set(value).size !== value.length ||
-      value.some((item) => !question.options?.some((option) => option.value === item))) {
+      value.some((item) => !question.options?.some((option) => option.value === item))
+    ) {
       invalid(question, "Choose available options without duplicates.");
     }
     return value;
@@ -116,8 +119,10 @@ function validateValue(question: SubmissionQuestion, value: unknown): NonFileAns
       valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
     } else {
       const date = new Date(`${value}T00:00:00Z`);
-      valid = /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-        !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+      valid =
+        /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+        !Number.isNaN(date.getTime()) &&
+        date.toISOString().slice(0, 10) === value;
     }
     if (!valid) invalid(question, "Enter a valid date or time.");
     return value;
@@ -161,7 +166,8 @@ export function validateFormAnswers(
         }
         const files = uploadedFiles[question._id] ?? [];
         if (!files.length) {
-          if (question.isRequired && !allowMissingFiles) invalid(question, "An answer is required.");
+          if (question.isRequired && !allowMissingFiles)
+            invalid(question, "An answer is required.");
           continue;
         }
         answers[question._id] = files;
@@ -170,7 +176,9 @@ export function validateFormAnswers(
       const rawValue = Object.prototype.hasOwnProperty.call(formAnswers, question._id)
         ? formAnswers[question._id]
         : undefined;
-      const isEmpty = rawValue === undefined || rawValue === null ||
+      const isEmpty =
+        rawValue === undefined ||
+        rawValue === null ||
         (typeof rawValue === "string" && rawValue.trim() === "") ||
         (Array.isArray(rawValue) && rawValue.length === 0);
       if (isEmpty) {

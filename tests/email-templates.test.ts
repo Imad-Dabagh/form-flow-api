@@ -54,7 +54,9 @@ describe("email templates", () => {
       role: "Manager",
     });
 
-    expect(email.subject).toBe("Invitation to join Acme <script>alert(1)</script> Team on Form Flow");
+    expect(email.subject).toBe(
+      "Invitation to join Acme <script>alert(1)</script> Team on Form Flow",
+    );
     expect(email.html).toContain("Acme &lt;script&gt;alert(1)&lt;/script&gt; Team");
     expect(email.html).not.toContain("<script>");
     expect(email.html).not.toContain("<img");

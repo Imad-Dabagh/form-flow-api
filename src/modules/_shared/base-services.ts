@@ -62,10 +62,7 @@ function throwNotFound(Model: Model<Entity>): never {
   throw notFound(Model.modelName);
 }
 
-async function decorate(
-  value: unknown,
-  config?: baseServiceConfigPropI,
-): Promise<unknown> {
+async function decorate(value: unknown, config?: baseServiceConfigPropI): Promise<unknown> {
   return mergeConfig(config).decorator(value);
 }
 
@@ -139,7 +136,10 @@ async function fetchAll(
 ) {
   const filter = data.query ?? {};
   const findQuery = applyPopulate(
-    Model.find(filter).select(data.selection as never).sort(data.sort).lean(),
+    Model.find(filter)
+      .select(data.selection as never)
+      .sort(data.sort)
+      .lean(),
     data.populate,
   );
 
@@ -182,7 +182,9 @@ async function fetchById(
   config?: baseServiceConfigPropI,
 ) {
   const result = await applyPopulate(
-    Model.findOne(queryById(data)).select(data.selection as never).lean(),
+    Model.findOne(queryById(data))
+      .select(data.selection as never)
+      .lean(),
     data.populate,
   );
 
@@ -203,7 +205,10 @@ async function fetchOne(
   config?: baseServiceConfigPropI,
 ) {
   const result = await applyPopulate(
-    Model.findOne(data.query ?? {}).select(data.selection as never).sort(data.sort).lean(),
+    Model.findOne(data.query ?? {})
+      .select(data.selection as never)
+      .sort(data.sort)
+      .lean(),
     data.populate,
   );
 
@@ -284,11 +289,19 @@ async function updateMany(Model: Model<Entity>, data: baseServiceDataPropI) {
 
 async function disableById(Model: Model<Entity>, data: baseServiceDataPropI) {
   // Useful for future models with an isDisabled field; FormFlow does not use it yet.
-  return Model.findOneAndUpdate(queryById(data), { isDisabled: true }, { returnDocument: "after" }).lean();
+  return Model.findOneAndUpdate(
+    queryById(data),
+    { isDisabled: true },
+    { returnDocument: "after" },
+  ).lean();
 }
 
 async function archiveById(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return Model.findOneAndUpdate(queryById(data), { archivedAt: new Date() }, { returnDocument: "after" }).lean();
+  return Model.findOneAndUpdate(
+    queryById(data),
+    { archivedAt: new Date() },
+    { returnDocument: "after" },
+  ).lean();
 }
 
 async function deleteOne(Model: Model<Entity>, data: baseServiceDataPropI) {
@@ -316,7 +329,11 @@ async function aggregate(
 
 function wrapHelper(
   Model: Model<Entity>,
-  fn: (Model: Model<Entity>, data: baseServiceDataPropI, config?: baseServiceConfigPropI) => Promise<unknown>,
+  fn: (
+    Model: Model<Entity>,
+    data: baseServiceDataPropI,
+    config?: baseServiceConfigPropI,
+  ) => Promise<unknown>,
 ) {
   return (data: baseServiceDataPropI, config?: baseServiceConfigPropI) => fn(Model, data, config);
 }

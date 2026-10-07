@@ -1,16 +1,8 @@
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import {
-  v2 as cloudinary,
-  type UploadApiErrorResponse,
-  type UploadApiResponse,
-} from "cloudinary";
+import { v2 as cloudinary, type UploadApiErrorResponse, type UploadApiResponse } from "cloudinary";
 import config from "#app/config/index";
-import type {
-  StorageProvider,
-  StorageUploadInput,
-  StoredFileMetadata,
-} from "./types.js";
+import type { StorageProvider, StorageUploadInput, StoredFileMetadata } from "./types.js";
 
 type CloudinaryResourceType = "image" | "raw" | "video";
 const UPLOAD_TIMEOUT_MS = 60_000;
@@ -48,16 +40,11 @@ function createSignedUrl(result: UploadApiResponse): string {
     type: "authenticated",
     resource_type: result.resource_type,
     version: result.version,
-    ...(result.resource_type !== "raw" && result.format
-      ? { format: result.format }
-      : {}),
+    ...(result.resource_type !== "raw" && result.format ? { format: result.format } : {}),
   });
 }
 
-function toStoredFile(
-  result: UploadApiResponse,
-  input: StorageUploadInput,
-): StoredFileMetadata {
+function toStoredFile(result: UploadApiResponse, input: StorageUploadInput): StoredFileMetadata {
   return {
     id: String(result.asset_id),
     storageKey: result.public_id,
@@ -113,10 +100,7 @@ class CloudinaryStorageProvider implements StorageProvider {
           use_filename: false,
           filename_override: input.fileName,
         },
-        (
-          error?: UploadApiErrorResponse,
-          result?: UploadApiResponse,
-        ) => {
+        (error?: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
             return fail(error);
           }

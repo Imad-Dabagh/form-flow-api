@@ -9,11 +9,19 @@ import type { Request } from "express";
 import { z } from "zod";
 import { storeFileStream } from "#app/modules/file-upload/index";
 import { getFileExtension } from "#app/modules/file-upload/file-name";
-import { isUploadExtensionInCategory, normalizeUploadExtension, type FormQuestionUploadPolicy } from "#app/modules/file-upload/policy";
+import {
+  isUploadExtensionInCategory,
+  normalizeUploadExtension,
+  type FormQuestionUploadPolicy,
+} from "#app/modules/file-upload/policy";
 import { MAX_UPLOAD_BYTES } from "#app/modules/file-upload/validation";
 import { storageProvider, type StoredFileMetadata } from "#app/services/storage/index";
 import { AppError, badRequest, payloadTooLarge, unsupportedMediaType } from "#app/utils/errors";
-import { validateFormAnswers, type SubmissionSection, type ValidatedAnswers } from "./validate-form-answers.js";
+import {
+  validateFormAnswers,
+  type SubmissionSection,
+  type ValidatedAnswers,
+} from "./validate-form-answers.js";
 
 const MAX_FILES = 10;
 const MAX_ANSWERS_BYTES = 1024 * 1024;
@@ -33,7 +41,10 @@ function parseAnswers(input: unknown): Record<string, unknown> {
   return result.data.formAnswers;
 }
 
-async function receiveMultipart(req: Request, directory: string): Promise<{ answers: Record<string, unknown>; files: PendingFile[] }> {
+async function receiveMultipart(
+  req: Request,
+  directory: string,
+): Promise<{ answers: Record<string, unknown>; files: PendingFile[] }> {
   let parser;
   try {
     parser = busboy({
@@ -79,15 +90,25 @@ async function receiveMultipart(req: Request, directory: string): Promise<{ answ
         truncated: false,
       };
       files.push(pending);
-      stream.once("limit", () => { pending.truncated = true; });
-      const write = pipeline(stream, createWriteStream(pending.filePath)).catch((error: unknown) => {
-        parseError ??= error instanceof Error ? error : badRequest("Could not receive a file.");
+      stream.once("limit", () => {
+        pending.truncated = true;
       });
+      const write = pipeline(stream, createWriteStream(pending.filePath)).catch(
+        (error: unknown) => {
+          parseError ??= error instanceof Error ? error : badRequest("Could not receive a file.");
+        },
+      );
       writes.push(write);
     });
-    parser.once("filesLimit", () => { parseError ??= badRequest(`Submit at most ${MAX_FILES} files.`); });
-    parser.once("fieldsLimit", () => { parseError ??= badRequest("Only formAnswers and file fields are allowed."); });
-    parser.once("partsLimit", () => { parseError ??= badRequest("Too many submission parts."); });
+    parser.once("filesLimit", () => {
+      parseError ??= badRequest(`Submit at most ${MAX_FILES} files.`);
+    });
+    parser.once("fieldsLimit", () => {
+      parseError ??= badRequest("Only formAnswers and file fields are allowed.");
+    });
+    parser.once("partsLimit", () => {
+      parseError ??= badRequest("Too many submission parts.");
+    });
     parser.once("error", () => reject(badRequest("The multipart submission is malformed.")));
     parser.once("close", resolve);
   });
@@ -118,12 +139,16 @@ export async function receiveSubmission<T>(
 ): Promise<T> {
   const contentType = req.headers["content-type"]?.toLowerCase() ?? "";
   if (!contentType.startsWith("multipart/form-data;")) {
-    if (!contentType.startsWith("application/json")) throw unsupportedMediaType("Use JSON or multipart/form-data.");
+    if (!contentType.startsWith("application/json"))
+      throw unsupportedMediaType("Use JSON or multipart/form-data.");
     return save(validateFormAnswers(sections, parseAnswers(req.body)));
   }
 
   const contentLength = Number(req.headers["content-length"]);
-  if (Number.isFinite(contentLength) && contentLength > MAX_FILES * MAX_UPLOAD_BYTES + MAX_ANSWERS_BYTES + 256 * 1024) {
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_FILES * MAX_UPLOAD_BYTES + MAX_ANSWERS_BYTES + 256 * 1024
+  ) {
     throw payloadTooLarge("The submission is too large.");
   }
   const directory = await mkdtemp(path.join(tmpdir(), "form-flow-submission-"));
@@ -131,14 +156,20 @@ export async function receiveSubmission<T>(
   try {
     const { answers, files } = await receiveMultipart(req, directory);
     validateFormAnswers(sections, answers, {}, true);
-    const questions = new Map(sections.filter((section) => !section.isHidden)
-      .flatMap((section) => section.questions)
-      .filter((question) => question.inputType === "file")
-      .map((question) => [question._id, question]));
+    const questions = new Map(
+      sections
+        .filter((section) => !section.isHidden)
+        .flatMap((section) => section.questions)
+        .filter((question) => question.inputType === "file")
+        .map((question) => [question._id, question]),
+    );
 
     const pendingUploads = files.map((file) => {
       const question = questions.get(file.questionId);
-      if (!question) throw badRequest("A file does not belong to a visible file question.", { questionId: file.questionId });
+      if (!question)
+        throw badRequest("A file does not belong to a visible file question.", {
+          questionId: file.questionId,
+        });
       if (file.truncated) {
         throw new AppError(`Files must be ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB or smaller.`, {
           statusCode: 413,
@@ -149,12 +180,16 @@ export async function receiveSubmission<T>(
       const category = question.typeConfig?.uploadCategory ?? "all";
       const policy: FormQuestionUploadPolicy = {
         category,
-        allowedExtensions: category === "all" ? [] : question.typeConfig?.allowedExtensions ?? [],
+        allowedExtensions: category === "all" ? [] : (question.typeConfig?.allowedExtensions ?? []),
       };
       const extension = normalizeUploadExtension(getFileExtension(file.originalName));
-      if (!isUploadExtensionInCategory(category, extension) ||
-        (policy.allowedExtensions.length > 0 && !policy.allowedExtensions.includes(extension))) {
-        throw badRequest("This file extension is not allowed for this question.", { questionId: file.questionId });
+      if (
+        !isUploadExtensionInCategory(category, extension) ||
+        (policy.allowedExtensions.length > 0 && !policy.allowedExtensions.includes(extension))
+      ) {
+        throw badRequest("This file extension is not allowed for this question.", {
+          questionId: file.questionId,
+        });
       }
       return { file, policy };
     });

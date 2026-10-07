@@ -22,7 +22,9 @@ router.get(
         _id: req.params.formId,
         type: "PUBLIC",
         archivedAt: null,
-      }).select("name type description sections displayMode isClosed").lean();
+      })
+        .select("name type description sections displayMode isClosed")
+        .lean();
       if (!form) throw notFound("Form");
 
       res.set("Cache-Control", "no-store");

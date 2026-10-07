@@ -51,7 +51,8 @@ const formSubmissionStatusSchema = new mongoose.Schema(
 
 formSubmissionStatusSchema.index({ organizationId: 1, formId: 1, order: 1 });
 
-const FormSubmissionStatus = mongoose.models.FormSubmissionStatus
-  ?? mongoose.model("FormSubmissionStatus", formSubmissionStatusSchema);
+const FormSubmissionStatus =
+  mongoose.models.FormSubmissionStatus ??
+  mongoose.model("FormSubmissionStatus", formSubmissionStatusSchema);
 
 export default FormSubmissionStatus;

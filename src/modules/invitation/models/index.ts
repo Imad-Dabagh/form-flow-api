@@ -38,7 +38,6 @@ invitationSchema.index(
 );
 invitationSchema.index({ email: 1, status: 1, expiresAt: 1 });
 
-const Invitation =
-  mongoose.models.Invitation ?? mongoose.model("Invitation", invitationSchema);
+const Invitation = mongoose.models.Invitation ?? mongoose.model("Invitation", invitationSchema);
 
 export default Invitation;

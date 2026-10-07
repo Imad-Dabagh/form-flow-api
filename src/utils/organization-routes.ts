@@ -13,16 +13,19 @@ export const teamRoles = [ORGANIZATION_ROLES.ADMIN, ORGANIZATION_ROLES.MANAGER];
 
 const primaryColorError = `primaryColor must be one of: ${organizationPrimaryColors.join(", ")}.`;
 
-export const primaryColorSchema = z.string({ error: primaryColorError })
+export const primaryColorSchema = z
+  .string({ error: primaryColorError })
   .refine((value) => organizationPrimaryColors.includes(value as OrganizationPrimaryColor), {
     message: primaryColorError,
   });
 
-export const teamEmailSchema = z.string({ error: "A valid email is required." })
-  .refine((value) => {
+export const teamEmailSchema = z.string({ error: "A valid email is required." }).refine(
+  (value) => {
     const email = value.trim().toLowerCase();
     return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }, { message: "A valid email is required." });
+  },
+  { message: "A valid email is required." },
+);
 
 function normalizePrimaryColor(value?: string): OrganizationPrimaryColor {
   return organizationPrimaryColors.includes(value as OrganizationPrimaryColor)
@@ -53,10 +56,12 @@ export function toOrganizationResponse(organization: {
 export async function findAuthAccount(email: string) {
   const database = mongoose.connection.db;
   if (!database) throw internalError();
-  return database.collection<{
-    email: string;
-    emailVerified: boolean;
-    name?: string;
-    image?: string;
-  }>("user").findOne({ email });
+  return database
+    .collection<{
+      email: string;
+      emailVerified: boolean;
+      name?: string;
+      image?: string;
+    }>("user")
+    .findOne({ email });
 }
