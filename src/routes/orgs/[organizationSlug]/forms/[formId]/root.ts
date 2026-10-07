@@ -14,7 +14,19 @@ const formIdSchema = z.string().refine(mongoose.isValidObjectId, {
   message: "A valid form ID is required.",
 });
 
-function toFormData(form: any) {
+type FormDataSource = {
+  _id: unknown;
+  name: string;
+  type: string;
+  description: string;
+  sections: unknown[];
+  displayMode?: string;
+  isClosed?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toFormData(form: FormDataSource) {
   return {
     id: String(form._id),
     name: form.name,
