@@ -1,6 +1,5 @@
 import cors from "cors";
-import express from "express";
-import type { Express } from "express";
+import express, { type Express } from "express";
 import { toNodeHandler } from "better-auth/node";
 import type { Auth } from "#app/auth/index";
 import config from "#app/config/index";
