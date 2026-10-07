@@ -198,7 +198,7 @@ describe("organization forms", () => {
     const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Feedback" });
     const submissionStatusId = await createDefaultStatus(form.id);
     const submittedAt = new Date("2026-01-01T12:00:00.000Z");
-    await FormSubmission.insertMany(Array.from({ length: 22 }, (_, index) => ({
+    await FormSubmission.insertMany(Array.from({ length: 22 }, () => ({
       organizationId: alphaId,
       formId: form.id,
       submissionStatusId,
