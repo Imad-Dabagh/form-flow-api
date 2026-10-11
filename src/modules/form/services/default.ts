@@ -4,7 +4,6 @@ import Model from "#app/modules/form/models/index";
 const services = BaseServices(Model);
 
 export const {
-  archiveById,
   countDocuments,
   createOne,
   deleteById,
