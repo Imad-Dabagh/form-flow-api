@@ -1,4 +1,4 @@
-import type { Model, PipelineStage, PopulateOptions, UpdateQuery } from "mongoose";
+import type { ClientSession, Model, PipelineStage, PopulateOptions, UpdateQuery } from "mongoose";
 import { notFound } from "#app/utils/errors";
 
 type Entity = Record<string, unknown>;
@@ -21,17 +21,29 @@ export interface baseServiceDataPropI {
   pagination?: boolean;
   field?: string;
   pipeline?: PipelineStage[];
+  session?: ClientSession;
 }
+
+type WithId = baseServiceDataPropI & { id: string };
+type WithQuery = baseServiceDataPropI & { query: Query };
+type WithField = baseServiceDataPropI & { field: string };
+type WithPayload = baseServiceDataPropI & { payload: Entity };
+type WithPayloads = baseServiceDataPropI & { payload: Entity[] };
+type WithQueryAndPayload = WithQuery & { payload: Entity };
+type WithIdAndPayload = WithId & { payload: Entity };
 
 export interface baseServiceConfigPropI {
   throwIfNoResult?: boolean;
   decorator?: (data: unknown) => unknown | Promise<unknown>;
 }
 
-export type baseServiceFnI = (
-  data: baseServiceDataPropI,
+export type baseServiceFnI<
+  TData extends baseServiceDataPropI = baseServiceDataPropI,
+  TResult = unknown,
+> = (
+  data: TData,
   config?: baseServiceConfigPropI,
-) => Promise<unknown>;
+) => Promise<TResult>;
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -54,7 +66,23 @@ function requireId(id?: string): string {
   return id;
 }
 
-function queryById(data: baseServiceDataPropI): Query {
+function requireQuery(query?: Query): Query {
+  if (!query || Object.keys(query).length === 0) {
+    throw new Error("A non-empty query is required for this operation");
+  }
+
+  return query;
+}
+
+function requireUpdatePayload(payload?: Entity | Entity[]): UpdateQuery<Entity> {
+  if (!payload || Array.isArray(payload) || Object.keys(payload).length === 0) {
+    throw new Error("A non-empty update payload is required for this operation");
+  }
+
+  return payload as UpdateQuery<Entity>;
+}
+
+function queryById(data: WithId): Query {
   return { ...data.query, _id: requireId(data.id) };
 }
 
@@ -64,6 +92,26 @@ function throwNotFound(Model: Model<Entity>): never {
 
 async function decorate(value: unknown, config?: baseServiceConfigPropI): Promise<unknown> {
   return mergeConfig(config).decorator(value);
+}
+
+async function decorateAll(
+  values: unknown[],
+  config?: baseServiceConfigPropI,
+  session?: ClientSession,
+): Promise<unknown[]> {
+  if (!session) return Promise.all(values.map((value) => decorate(value, config)));
+
+  const decorated: unknown[] = [];
+  for (const value of values) decorated.push(await decorate(value, config));
+  return decorated;
+}
+
+function applySession<T extends { session(session: ClientSession | null): T }>(
+  operation: T,
+  session?: ClientSession,
+): T {
+  if (session) operation.session(session);
+  return operation;
 }
 
 function applyPopulate<T>(query: T, populate?: baseServiceDataPropI["populate"]): T {
@@ -79,7 +127,7 @@ async function countDocuments(
   data: baseServiceDataPropI,
   config?: baseServiceConfigPropI,
 ) {
-  const count = await Model.countDocuments(data.query ?? {});
+  const count = await applySession(Model.countDocuments(data.query ?? {}), data.session);
 
   if (mergeConfig(config).throwIfNoResult && count === 0) {
     throwNotFound(Model);
@@ -90,10 +138,10 @@ async function countDocuments(
 
 async function existsById(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithId,
   config?: baseServiceConfigPropI,
 ) {
-  const result = await Model.exists(queryById(data));
+  const result = Boolean(await applySession(Model.exists(queryById(data)), data.session));
 
   if (mergeConfig(config).throwIfNoResult && !result) {
     throwNotFound(Model);
@@ -104,10 +152,10 @@ async function existsById(
 
 async function exists(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithQuery,
   config?: baseServiceConfigPropI,
 ) {
-  const result = await Model.exists(data.query ?? {});
+  const result = Boolean(await applySession(Model.exists(requireQuery(data.query)), data.session));
 
   if (mergeConfig(config).throwIfNoResult && !result) {
     throwNotFound(Model);
@@ -118,15 +166,18 @@ async function exists(
 
 async function distinct(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithField,
   config?: baseServiceConfigPropI,
 ) {
   if (!data.field) {
     throw new Error("A field is required for distinct");
   }
 
-  const result = await Model.distinct(data.field, data.query ?? {});
-  return Promise.all(result.map((value) => decorate(value, config)));
+  const result = await applySession(Model.distinct(data.field, data.query ?? {}), data.session);
+  if (mergeConfig(config).throwIfNoResult && result.length === 0) {
+    throwNotFound(Model);
+  }
+  return decorateAll(result, config, data.session);
 }
 
 async function fetchAll(
@@ -178,15 +229,14 @@ async function fetchAll(
 
 async function fetchById(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithId,
   config?: baseServiceConfigPropI,
 ) {
-  const result = await applyPopulate(
-    Model.findOne(queryById(data))
-      .select(data.selection as never)
-      .lean(),
-    data.populate,
-  );
+  const findQuery = Model.findOne(queryById(data)).lean();
+  if (data.selection) findQuery.select(data.selection);
+  if (typeof data.populate === "string") findQuery.populate(data.populate);
+  else if (data.populate) findQuery.populate(data.populate);
+  const result = await applySession(findQuery, data.session);
 
   if (result) {
     return decorate(result, config);
@@ -201,16 +251,14 @@ async function fetchById(
 
 async function fetchOne(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithQuery,
   config?: baseServiceConfigPropI,
 ) {
-  const result = await applyPopulate(
-    Model.findOne(data.query ?? {})
-      .select(data.selection as never)
-      .sort(data.sort)
-      .lean(),
-    data.populate,
-  );
+  const findQuery = Model.findOne(requireQuery(data.query)).sort(data.sort).lean();
+  if (data.selection) findQuery.select(data.selection);
+  if (typeof data.populate === "string") findQuery.populate(data.populate);
+  else if (data.populate) findQuery.populate(data.populate);
+  const result = await applySession(findQuery, data.session);
 
   if (result) {
     return decorate(result, config);
@@ -225,44 +273,48 @@ async function fetchOne(
 
 async function createOne(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithPayload,
   config?: baseServiceConfigPropI,
 ) {
   if (!data.payload || Array.isArray(data.payload)) {
     throw new Error("A single payload is required for createOne");
   }
 
-  const result = await Model.create(data.payload);
+  const [result] = await Model.create([data.payload], { session: data.session });
   return decorate(result.toObject(), config);
 }
 
 async function createMany(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithPayloads,
   config?: baseServiceConfigPropI,
 ) {
   if (!Array.isArray(data.payload)) {
     throw new Error("An array payload is required for createMany");
   }
 
-  const result = await Model.insertMany(data.payload);
-  return Promise.all(result.map((document) => decorate(document.toObject(), config)));
+  const result = await Model.insertMany(data.payload, { session: data.session });
+  return decorateAll(
+    result.map((document) => document.toObject()),
+    config,
+    data.session,
+  );
 }
 
 async function updateOne(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithQueryAndPayload,
   config?: baseServiceConfigPropI,
 ) {
-  const result = await applyPopulate(
-    Model.findOneAndUpdate(data.query ?? {}, data.payload as UpdateQuery<Entity>, {
-      returnDocument: "after",
-      runValidators: true,
-    })
-      .select(data.selection as never)
-      .lean(),
-    data.populate,
-  );
+  const updateQuery = Model.findOneAndUpdate(
+    requireQuery(data.query),
+    requireUpdatePayload(data.payload),
+    { returnDocument: "after", runValidators: true },
+  ).lean();
+  if (data.selection) updateQuery.select(data.selection);
+  if (typeof data.populate === "string") updateQuery.populate(data.populate);
+  else if (data.populate) updateQuery.populate(data.populate);
+  const result = await applySession(updateQuery, data.session);
 
   if (result) {
     return decorate(result, config);
@@ -277,27 +329,63 @@ async function updateOne(
 
 async function updateById(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithIdAndPayload,
   config?: baseServiceConfigPropI,
 ) {
   return updateOne(Model, { ...data, query: queryById(data) }, config);
 }
 
-async function updateMany(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return Model.updateMany(data.query ?? {}, data.payload as UpdateQuery<Entity>);
+async function updateMany(
+  Model: Model<Entity>,
+  data: WithQueryAndPayload,
+  config?: baseServiceConfigPropI,
+) {
+  const result = await Model.updateMany(requireQuery(data.query), requireUpdatePayload(data.payload), {
+    runValidators: true,
+    session: data.session,
+  });
+  if (mergeConfig(config).throwIfNoResult && result.matchedCount === 0) {
+    throwNotFound(Model);
+  }
+  return decorate(result, config);
 }
 
-async function deleteOne(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return Model.findOneAndDelete(data.query ?? {}).lean();
+async function deleteOne(
+  Model: Model<Entity>,
+  data: WithQuery,
+  config?: baseServiceConfigPropI,
+) {
+  const deleteQuery = Model.findOneAndDelete(requireQuery(data.query)).lean();
+  if (data.selection) deleteQuery.select(data.selection);
+  if (typeof data.populate === "string") deleteQuery.populate(data.populate);
+  else if (data.populate) deleteQuery.populate(data.populate);
+  const result = await applySession(deleteQuery, data.session);
+  if (!result) {
+    if (mergeConfig(config).throwIfNoResult) throwNotFound(Model);
+    return null;
+  }
+  return decorate(result, config);
 }
 
-async function deleteById(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return deleteOne(Model, { ...data, query: queryById(data) });
+async function deleteById(
+  Model: Model<Entity>,
+  data: WithId,
+  config?: baseServiceConfigPropI,
+) {
+  return deleteOne(Model, { ...data, query: queryById(data) }, config);
 }
 
-async function deleteMany(Model: Model<Entity>, data: baseServiceDataPropI) {
-  // Keep for maintenance jobs only; callers must always supply a tenant-scoped query.
-  return Model.deleteMany(data.query ?? {});
+async function deleteMany(
+  Model: Model<Entity>,
+  data: WithQuery,
+  config?: baseServiceConfigPropI,
+) {
+  // Bulk deletion requires an explicit filter; tenant-owned models need tenant scope.
+  const result = await Model.deleteMany(requireQuery(data.query), { session: data.session });
+  if (mergeConfig(config).throwIfNoResult && result.deletedCount === 0) {
+    throwNotFound(Model);
+  }
+  return decorate(result, config);
 }
 
 async function aggregate(
@@ -310,15 +398,15 @@ async function aggregate(
   return decorate(result, config);
 }
 
-function wrapHelper(
+function wrapHelper<TData extends baseServiceDataPropI, TResult>(
   Model: Model<Entity>,
   fn: (
     Model: Model<Entity>,
-    data: baseServiceDataPropI,
+    data: TData,
     config?: baseServiceConfigPropI,
-  ) => Promise<unknown>,
+  ) => Promise<TResult>,
 ) {
-  return (data: baseServiceDataPropI, config?: baseServiceConfigPropI) => fn(Model, data, config);
+  return (data: TData, config?: baseServiceConfigPropI) => fn(Model, data, config);
 }
 
 function BaseServices(Model: Model<Entity>) {
