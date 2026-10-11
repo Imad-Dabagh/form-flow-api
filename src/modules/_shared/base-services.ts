@@ -1,4 +1,5 @@
 import type { ClientSession, Model, PipelineStage, PopulateOptions, UpdateQuery } from "mongoose";
+import Logger from "#app/services/logger/index";
 import { notFound } from "#app/utils/errors";
 
 type Entity = Record<string, unknown>;
@@ -18,7 +19,6 @@ export interface baseServiceDataPropI {
   sort?: string | Record<string, 1 | -1>;
   page?: number;
   limit?: number;
-  pagination?: boolean;
   field?: string;
   pipeline?: PipelineStage[];
   session?: ClientSession;
@@ -27,6 +27,7 @@ export interface baseServiceDataPropI {
 type WithId = baseServiceDataPropI & { id: string };
 type WithQuery = baseServiceDataPropI & { query: Query };
 type WithField = baseServiceDataPropI & { field: string };
+type WithPipeline = baseServiceDataPropI & { pipeline: PipelineStage[] };
 type WithPayload = baseServiceDataPropI & { payload: Entity };
 type WithPayloads = baseServiceDataPropI & { payload: Entity[] };
 type WithQueryAndPayload = WithQuery & { payload: Entity };
@@ -48,6 +49,12 @@ export type baseServiceFnI<
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const LARGE_RESULT_WARNING_THRESHOLD = 60;
+
+type AggregatePage = {
+  docs: unknown[];
+  metadata: Array<{ totalDocs: number }>;
+};
 
 const defaultConfig: Required<baseServiceConfigPropI> = {
   throwIfNoResult: false,
@@ -56,6 +63,50 @@ const defaultConfig: Required<baseServiceConfigPropI> = {
 
 function mergeConfig(config?: baseServiceConfigPropI): Required<baseServiceConfigPropI> {
   return { ...defaultConfig, ...config };
+}
+
+function paginationOptions(data: baseServiceDataPropI) {
+  const page = data.page ?? DEFAULT_PAGE;
+  const requestedLimit = data.limit ?? DEFAULT_LIMIT;
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new Error("Page must be a positive integer");
+  }
+  if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1) {
+    throw new Error("Limit must be a positive integer");
+  }
+
+  const limit = Math.min(requestedLimit, MAX_LIMIT);
+  const skip = (page - 1) * limit;
+  if (!Number.isSafeInteger(skip)) {
+    throw new Error("Page is too large for the requested limit");
+  }
+
+  return {
+    page,
+    limit,
+    skip,
+  };
+}
+
+function pageResult(docs: unknown[], totalDocs: number, page: number, limit: number) {
+  return {
+    docs,
+    totalDocs,
+    page,
+    limit,
+    totalPages: limit > 0 ? Math.ceil(totalDocs / limit) : 0,
+    hasNextPage: limit > 0 && page * limit < totalDocs,
+    hasPrevPage: page > 1,
+  };
+}
+
+function warnIfLargeResult(Model: Model<Entity>, count: number) {
+  if (count > LARGE_RESULT_WARNING_THRESHOLD) {
+    Logger.warn("Large unpaginated base-service result", {
+      model: Model.modelName,
+      count,
+    });
+  }
 }
 
 function requireId(id?: string): string {
@@ -112,14 +163,6 @@ function applySession<T extends { session(session: ClientSession | null): T }>(
 ): T {
   if (session) operation.session(session);
   return operation;
-}
-
-function applyPopulate<T>(query: T, populate?: baseServiceDataPropI["populate"]): T {
-  if (populate && "populate" in (query as object)) {
-    (query as { populate(value: baseServiceDataPropI["populate"]): void }).populate(populate);
-  }
-
-  return query;
 }
 
 async function countDocuments(
@@ -180,51 +223,57 @@ async function distinct(
   return decorateAll(result, config, data.session);
 }
 
+function buildFindQuery(Model: Model<Entity>, data: baseServiceDataPropI) {
+  const filter = data.query ?? {};
+  const findQuery = Model.find(filter).sort(data.sort).lean();
+  if (data.selection) findQuery.select(data.selection);
+  if (typeof data.populate === "string") findQuery.populate(data.populate);
+  else if (data.populate) findQuery.populate(data.populate);
+  return applySession(findQuery, data.session);
+}
+
 async function fetchAll(
   Model: Model<Entity>,
   data: baseServiceDataPropI,
   config?: baseServiceConfigPropI,
 ) {
   const filter = data.query ?? {};
-  const findQuery = applyPopulate(
-    Model.find(filter)
-      .select(data.selection as never)
-      .sort(data.sort)
-      .lean(),
-    data.populate,
-  );
+  const { page, limit, skip } = paginationOptions(data);
+  const findQuery = buildFindQuery(Model, data).skip(skip).limit(limit);
 
-  if (data.pagination === false) {
-    if (data.limit) {
-      findQuery.limit(Math.min(Math.max(data.limit, 1), MAX_LIMIT));
-    }
-
-    const docs = await findQuery;
-    if (mergeConfig(config).throwIfNoResult && docs.length === 0) {
-      throwNotFound(Model);
-    }
-
-    return Promise.all(docs.map((doc) => decorate(doc, config)));
+  const countQuery = applySession(Model.countDocuments(filter), data.session);
+  // MongoDB does not support parallel operations on the same transaction session.
+  let docs: Awaited<ReturnType<typeof buildFindQuery>>;
+  let totalDocs: number;
+  if (data.session) {
+    docs = await findQuery;
+    totalDocs = await countQuery;
+  } else {
+    [docs, totalDocs] = await Promise.all([findQuery, countQuery]);
+  }
+  if (mergeConfig(config).throwIfNoResult && totalDocs === 0) {
+    throwNotFound(Model);
   }
 
-  const page = Math.max(data.page ?? DEFAULT_PAGE, 1);
-  const limit = Math.min(Math.max(data.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  findQuery.skip((page - 1) * limit).limit(limit);
+  return pageResult(await decorateAll(docs, config, data.session), totalDocs, page, limit);
+}
 
-  const [docs, totalDocs] = await Promise.all([findQuery, Model.countDocuments(filter)]);
+async function findMany(
+  Model: Model<Entity>,
+  data: baseServiceDataPropI,
+  config?: baseServiceConfigPropI,
+) {
+  if (data.page !== undefined || data.limit !== undefined) {
+    throw new Error("Page and limit cannot be used without pagination");
+  }
+
+  const docs = await buildFindQuery(Model, data);
   if (mergeConfig(config).throwIfNoResult && docs.length === 0) {
     throwNotFound(Model);
   }
 
-  return {
-    docs: await Promise.all(docs.map((doc) => decorate(doc, config))),
-    totalDocs,
-    page,
-    limit,
-    totalPages: Math.ceil(totalDocs / limit),
-    hasNextPage: page * limit < totalDocs,
-    hasPrevPage: page > 1,
-  };
+  warnIfLargeResult(Model, docs.length);
+  return decorateAll(docs, config, data.session);
 }
 
 async function fetchById(
@@ -388,14 +437,51 @@ async function deleteMany(
   return decorate(result, config);
 }
 
-async function aggregate(
+async function aggregatePage(
   Model: Model<Entity>,
-  data: baseServiceDataPropI,
+  data: WithPipeline,
   config?: baseServiceConfigPropI,
 ) {
-  // Keep native aggregation for reporting later. Start pipelines with organizationId matching.
-  const result = await Model.aggregate(data.pipeline ?? []);
-  return decorate(result, config);
+  const { page, limit, skip } = paginationOptions(data);
+  const aggregation = Model.aggregate<AggregatePage>(data.pipeline ?? []);
+  if (data.sort) aggregation.sort(data.sort);
+  aggregation.facet({
+    docs: [{ $skip: skip }, { $limit: limit }],
+    metadata: [{ $count: "totalDocs" }],
+  });
+
+  const [result] = await applySession(aggregation, data.session);
+  const totalDocs = result?.metadata[0]?.totalDocs ?? 0;
+  if (mergeConfig(config).throwIfNoResult && totalDocs === 0) {
+    throwNotFound(Model);
+  }
+
+  return pageResult(
+    await decorateAll(result?.docs ?? [], config, data.session),
+    totalDocs,
+    page,
+    limit,
+  );
+}
+
+async function runAggregation(
+  Model: Model<Entity>,
+  data: WithPipeline,
+  config?: baseServiceConfigPropI,
+) {
+  if (data.page !== undefined || data.limit !== undefined) {
+    throw new Error("Page and limit cannot be used without pagination");
+  }
+
+  const aggregation = Model.aggregate(data.pipeline ?? []);
+  if (data.sort) aggregation.sort(data.sort);
+  const docs = await applySession(aggregation, data.session);
+  if (mergeConfig(config).throwIfNoResult && docs.length === 0) {
+    throwNotFound(Model);
+  }
+
+  warnIfLargeResult(Model, docs.length);
+  return decorateAll(docs, config, data.session);
 }
 
 function wrapHelper<TData extends baseServiceDataPropI, TResult>(
@@ -416,6 +502,7 @@ function BaseServices(Model: Model<Entity>) {
     exists: wrapHelper(Model, exists),
     distinct: wrapHelper(Model, distinct),
     fetchAll: wrapHelper(Model, fetchAll),
+    findMany: wrapHelper(Model, findMany),
     fetchById: wrapHelper(Model, fetchById),
     fetchOne: wrapHelper(Model, fetchOne),
     createOne: wrapHelper(Model, createOne),
@@ -426,8 +513,8 @@ function BaseServices(Model: Model<Entity>) {
     deleteById: wrapHelper(Model, deleteById),
     deleteOne: wrapHelper(Model, deleteOne),
     deleteMany: wrapHelper(Model, deleteMany),
-    aggregate: wrapHelper(Model, aggregate),
-    aggregateWithoutPaginate: wrapHelper(Model, aggregate),
+    aggregatePage: wrapHelper(Model, aggregatePage),
+    runAggregation: wrapHelper(Model, runAggregation),
   };
 }
 
