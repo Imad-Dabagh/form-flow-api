@@ -7,10 +7,7 @@ type Query = Record<string, unknown>;
 type Selection = string | string[] | Record<string, 0 | 1>;
 
 export interface baseServiceDataPropI {
-  /**
-   * Required for every organization-owned lookup. The base service merges this
-   * query with an id for the *ById methods, so callers can scope by tenant.
-   */
+  /** Include organizationId for organization-owned records, including *ById calls. */
   query?: Query;
   id?: string;
   payload?: Entity | Entity[];
@@ -61,10 +58,12 @@ const defaultConfig: Required<baseServiceConfigPropI> = {
   decorator: (data) => data,
 };
 
+/** Fills in any service options the caller did not provide. */
 function mergeConfig(config?: baseServiceConfigPropI): Required<baseServiceConfigPropI> {
   return { ...defaultConfig, ...config };
 }
 
+/** Validates page and limit, applies the maximum page size, and calculates the database offset. */
 function paginationOptions(data: baseServiceDataPropI) {
   const page = data.page ?? DEFAULT_PAGE;
   const requestedLimit = data.limit ?? DEFAULT_LIMIT;
@@ -88,6 +87,7 @@ function paginationOptions(data: baseServiceDataPropI) {
   };
 }
 
+/** Builds the common pagination fields returned by paginated find and aggregation methods. */
 function pageResult(docs: unknown[], totalDocs: number, page: number, limit: number) {
   return {
     docs,
@@ -100,6 +100,7 @@ function pageResult(docs: unknown[], totalDocs: number, page: number, limit: num
   };
 }
 
+/** Warns when an unpaginated query returns enough records to merit review. */
 function warnIfLargeResult(Model: Model<Entity>, count: number) {
   if (count > LARGE_RESULT_WARNING_THRESHOLD) {
     Logger.warn("Large unpaginated base-service result", {
@@ -109,6 +110,7 @@ function warnIfLargeResult(Model: Model<Entity>, count: number) {
   }
 }
 
+/** Requires a non-empty record id before an id-based operation runs. */
 function requireId(id?: string): string {
   if (!id) {
     throw new Error("An id is required for this operation");
@@ -117,6 +119,7 @@ function requireId(id?: string): string {
   return id;
 }
 
+/** Requires a non-empty filter so a write cannot accidentally target every record. */
 function requireQuery(query?: Query): Query {
   if (!query || Object.keys(query).length === 0) {
     throw new Error("A non-empty query is required for this operation");
@@ -125,6 +128,7 @@ function requireQuery(query?: Query): Query {
   return query;
 }
 
+/** Requires a non-empty object update and converts it to Mongoose's update type. */
 function requireUpdatePayload(payload?: Entity | Entity[]): UpdateQuery<Entity> {
   if (!payload || Array.isArray(payload) || Object.keys(payload).length === 0) {
     throw new Error("A non-empty update payload is required for this operation");
@@ -133,18 +137,22 @@ function requireUpdatePayload(payload?: Entity | Entity[]): UpdateQuery<Entity> 
   return payload as UpdateQuery<Entity>;
 }
 
+/** Combines the supplied filter with the record id, preserving any tenant scope in the filter. */
 function queryById(data: WithId): Query {
   return { ...data.query, _id: requireId(data.id) };
 }
 
+/** Throws the app's standard not-found error for the model handled by this service. */
 function throwNotFound(Model: Model<Entity>): never {
   throw notFound(Model.modelName);
 }
 
+/** Applies the configured decorator to one result before returning it to the caller. */
 async function decorate(value: unknown, config?: baseServiceConfigPropI): Promise<unknown> {
   return mergeConfig(config).decorator(value);
 }
 
+/** Decorates a list of results; runs sequentially when a transaction session is active. */
 async function decorateAll(
   values: unknown[],
   config?: baseServiceConfigPropI,
@@ -157,6 +165,7 @@ async function decorateAll(
   return decorated;
 }
 
+/** Attaches the optional MongoDB session to a Mongoose query or aggregation. */
 function applySession<T extends { session(session: ClientSession | null): T }>(
   operation: T,
   session?: ClientSession,
@@ -165,6 +174,7 @@ function applySession<T extends { session(session: ClientSession | null): T }>(
   return operation;
 }
 
+/** Counts records matching the optional filter, or throws when no records match and requested. */
 async function countDocuments(
   Model: Model<Entity>,
   data: baseServiceDataPropI,
@@ -179,6 +189,7 @@ async function countDocuments(
   return count;
 }
 
+/** Checks whether a record exists by id, while retaining any additional filter such as organization scope. */
 async function existsById(
   Model: Model<Entity>,
   data: WithId,
@@ -193,6 +204,7 @@ async function existsById(
   return result;
 }
 
+/** Checks whether at least one record matches the required filter. */
 async function exists(
   Model: Model<Entity>,
   data: WithQuery,
@@ -207,6 +219,7 @@ async function exists(
   return result;
 }
 
+/** Returns distinct values for a required field, optionally filtered and decorated. */
 async function distinct(
   Model: Model<Entity>,
   data: WithField,
@@ -223,6 +236,7 @@ async function distinct(
   return decorateAll(result, config, data.session);
 }
 
+/** Builds a lean find query with the requested filter, sorting, selection, population, and session. */
 function buildFindQuery(Model: Model<Entity>, data: baseServiceDataPropI) {
   const filter = data.query ?? {};
   const findQuery = Model.find(filter).sort(data.sort).lean();
@@ -232,6 +246,7 @@ function buildFindQuery(Model: Model<Entity>, data: baseServiceDataPropI) {
   return applySession(findQuery, data.session);
 }
 
+/** Finds one page of records and returns the records together with pagination metadata. */
 async function fetchAll(
   Model: Model<Entity>,
   data: baseServiceDataPropI,
@@ -258,6 +273,7 @@ async function fetchAll(
   return pageResult(await decorateAll(docs, config, data.session), totalDocs, page, limit);
 }
 
+/** Finds all matching records as an array; pagination options are rejected to avoid accidental ambiguity. */
 async function findMany(
   Model: Model<Entity>,
   data: baseServiceDataPropI,
@@ -276,6 +292,7 @@ async function findMany(
   return decorateAll(docs, config, data.session);
 }
 
+/** Finds one record by id and any additional filter, returning null when it is absent unless configured to throw. */
 async function fetchById(
   Model: Model<Entity>,
   data: WithId,
@@ -298,6 +315,7 @@ async function fetchById(
   return null;
 }
 
+/** Finds the first record matching a required filter, returning null when absent unless configured to throw. */
 async function fetchOne(
   Model: Model<Entity>,
   data: WithQuery,
@@ -320,6 +338,7 @@ async function fetchOne(
   return null;
 }
 
+/** Creates one record and returns its plain object form after applying the configured decorator. */
 async function createOne(
   Model: Model<Entity>,
   data: WithPayload,
@@ -333,6 +352,7 @@ async function createOne(
   return decorate(result.toObject(), config);
 }
 
+/** Creates multiple records and returns their plain object forms after applying the configured decorator. */
 async function createMany(
   Model: Model<Entity>,
   data: WithPayloads,
@@ -350,6 +370,7 @@ async function createMany(
   );
 }
 
+/** Updates the first record matching a required filter and returns the updated plain object or null. */
 async function updateOne(
   Model: Model<Entity>,
   data: WithQueryAndPayload,
@@ -376,6 +397,7 @@ async function updateOne(
   return null;
 }
 
+/** Updates one record by id, retaining any additional filter such as organization scope. */
 async function updateById(
   Model: Model<Entity>,
   data: WithIdAndPayload,
@@ -384,6 +406,7 @@ async function updateById(
   return updateOne(Model, { ...data, query: queryById(data) }, config);
 }
 
+/** Updates every record matching a required filter and returns Mongoose's update result. */
 async function updateMany(
   Model: Model<Entity>,
   data: WithQueryAndPayload,
@@ -399,6 +422,7 @@ async function updateMany(
   return decorate(result, config);
 }
 
+/** Deletes the first record matching a required filter and returns its plain object or null. */
 async function deleteOne(
   Model: Model<Entity>,
   data: WithQuery,
@@ -416,6 +440,7 @@ async function deleteOne(
   return decorate(result, config);
 }
 
+/** Deletes one record by id, retaining any additional filter such as organization scope. */
 async function deleteById(
   Model: Model<Entity>,
   data: WithId,
@@ -424,6 +449,7 @@ async function deleteById(
   return deleteOne(Model, { ...data, query: queryById(data) }, config);
 }
 
+/** Deletes every record matching a required filter and returns Mongoose's delete result. */
 async function deleteMany(
   Model: Model<Entity>,
   data: WithQuery,
@@ -437,6 +463,7 @@ async function deleteMany(
   return decorate(result, config);
 }
 
+/** Runs an aggregation with pagination and returns its results with pagination metadata. */
 async function aggregatePage(
   Model: Model<Entity>,
   data: WithPipeline,
@@ -464,6 +491,7 @@ async function aggregatePage(
   );
 }
 
+/** Runs an aggregation and returns its full result array; page and limit options are rejected. */
 async function runAggregation(
   Model: Model<Entity>,
   data: WithPipeline,
@@ -484,6 +512,7 @@ async function runAggregation(
   return decorateAll(docs, config, data.session);
 }
 
+/** Binds a shared operation to its model so module services do not pass the model on every call. */
 function wrapHelper<TData extends baseServiceDataPropI, TResult>(
   Model: Model<Entity>,
   fn: (
@@ -495,7 +524,9 @@ function wrapHelper<TData extends baseServiceDataPropI, TResult>(
   return (data: TData, config?: baseServiceConfigPropI) => fn(Model, data, config);
 }
 
+/** Creates the model-specific set of reusable database operations exposed by a module. */
 function BaseServices(Model: Model<Entity>) {
+  // Record-returning methods expose plain objects; decorators receive those objects.
   return {
     countDocuments: wrapHelper(Model, countDocuments),
     existsById: wrapHelper(Model, existsById),
