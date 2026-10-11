@@ -287,23 +287,6 @@ async function updateMany(Model: Model<Entity>, data: baseServiceDataPropI) {
   return Model.updateMany(data.query ?? {}, data.payload as UpdateQuery<Entity>);
 }
 
-async function disableById(Model: Model<Entity>, data: baseServiceDataPropI) {
-  // Useful for future models with an isDisabled field; FormFlow does not use it yet.
-  return Model.findOneAndUpdate(
-    queryById(data),
-    { isDisabled: true },
-    { returnDocument: "after" },
-  ).lean();
-}
-
-async function archiveById(Model: Model<Entity>, data: baseServiceDataPropI) {
-  return Model.findOneAndUpdate(
-    queryById(data),
-    { archivedAt: new Date() },
-    { returnDocument: "after" },
-  ).lean();
-}
-
 async function deleteOne(Model: Model<Entity>, data: baseServiceDataPropI) {
   return Model.findOneAndDelete(data.query ?? {}).lean();
 }
@@ -352,8 +335,6 @@ function BaseServices(Model: Model<Entity>) {
     updateById: wrapHelper(Model, updateById),
     updateOne: wrapHelper(Model, updateOne),
     updateMany: wrapHelper(Model, updateMany),
-    disableById: wrapHelper(Model, disableById),
-    archiveById: wrapHelper(Model, archiveById),
     deleteById: wrapHelper(Model, deleteById),
     deleteOne: wrapHelper(Model, deleteOne),
     deleteMany: wrapHelper(Model, deleteMany),
