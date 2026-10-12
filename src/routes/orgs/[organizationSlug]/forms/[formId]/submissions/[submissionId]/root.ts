@@ -2,9 +2,9 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import Form from "#app/modules/form/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import FormModule from "#app/modules/form/index";
 import { internalError, notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -34,30 +34,29 @@ router.put<{ formId: string; submissionId: string }>(
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
       const submission = await session.withTransaction(async () => {
-        const form = await Form.updateOne(
-          { _id: formId, organizationId, archivedAt: null },
-          { $inc: { statusRevision: 1 } },
-          { session },
-        );
-        if (form.matchedCount !== 1) throw notFound("Form");
+        const form = await FormModule.services.updateById({
+          id: formId,
+          query: { organizationId, archivedAt: null },
+          payload: { $inc: { statusRevision: 1 } },
+          session,
+        });
+        if (!form) throw notFound("Form");
 
-        const status = await FormSubmissionStatus.findOne({
-          _id: req.body.submissionStatusId,
-          organizationId,
-          formId,
-        })
-          .select("_id")
-          .session(session)
-          .lean();
+        const status = (await FormSubmissionStatusModule.services.fetchById({
+          id: req.body.submissionStatusId,
+          query: { organizationId, formId },
+          selection: "_id",
+          session,
+        })) as { _id: unknown } | null;
         if (!status) throw notFound("Submission status");
 
-        const updated = await FormSubmission.findOneAndUpdate(
-          { _id: req.params.submissionId, organizationId, formId },
-          { $set: { submissionStatusId: status._id } },
-          { returnDocument: "after", runValidators: true, session },
-        )
-          .select("_id submissionStatusId updatedAt")
-          .lean();
+        const updated = (await FormSubmissionModule.services.updateById({
+          id: req.params.submissionId,
+          query: { organizationId, formId },
+          payload: { $set: { submissionStatusId: status._id } },
+          selection: "_id submissionStatusId updatedAt",
+          session,
+        })) as { _id: unknown; submissionStatusId: unknown; updatedAt: Date } | null;
         if (!updated) throw notFound("Submission");
         return updated;
       });

@@ -2,9 +2,9 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import Form from "#app/modules/form/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import User from "#app/modules/user/models/index";
+import FormModule from "#app/modules/form/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import UserModule from "#app/modules/user/index";
 import { badRequest, notFound } from "#app/utils/errors";
 import type { StoredFileMetadata } from "#app/services/storage/index";
 
@@ -13,6 +13,26 @@ const PAGE_SIZE = 20;
 const formIdSchema = z.string().refine(mongoose.isValidObjectId, {
   message: "A valid form ID is required.",
 });
+
+interface SubmissionListResult {
+  items: Array<{
+    _id: mongoose.Types.ObjectId;
+    submittedAt: Date | null;
+    createdAt: Date;
+    submittedBy: mongoose.Types.ObjectId | null;
+    submissionStatusId: mongoose.Types.ObjectId | null;
+    answers: Record<string, unknown>;
+  }>;
+  count: Array<{ value: number }>;
+}
+
+interface Submitter {
+  _id: unknown;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  profilePic?: string;
+}
 
 /** GET /api/orgs/:organizationSlug/forms/:formId/submissions */
 router.get<{ formId: string }>(
@@ -50,9 +70,11 @@ router.get<{ formId: string }>(
     try {
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
-      const form = await Form.findOne({ _id: formId, organizationId, archivedAt: null })
-        .select("type")
-        .lean();
+      const form = (await FormModule.services.fetchById({
+        id: formId,
+        query: { organizationId, archivedAt: null },
+        selection: "type",
+      })) as { type: string } | null;
       if (!form) throw notFound("Form");
       const page = Number(req.query.page ?? 1);
       const status = req.query.status ?? "submitted";
@@ -88,49 +110,42 @@ router.get<{ formId: string }>(
         ...(req.query.dateFrom ? { $gte: new Date(String(req.query.dateFrom)) } : {}),
         ...(req.query.dateBefore ? { $lt: new Date(String(req.query.dateBefore)) } : {}),
       };
-      const [result] = await FormSubmission.aggregate<{
-        items: Array<{
-          _id: mongoose.Types.ObjectId;
-          submittedAt: Date | null;
-          createdAt: Date;
-          submittedBy: mongoose.Types.ObjectId | null;
-          submissionStatusId: mongoose.Types.ObjectId | null;
-          answers: Record<string, unknown>;
-        }>;
-        count: Array<{ value: number }>;
-      }>([
-        { $match: scope },
-        { $addFields: { sortAt: { $ifNull: ["$submittedAt", "$createdAt"] } } },
-        ...(Object.keys(dateScope).length ? [{ $match: { sortAt: dateScope } }] : []),
-        {
-          $facet: {
-            items: [
-              { $sort: { sortAt: direction, _id: direction } },
-              { $skip: (page - 1) * PAGE_SIZE },
-              { $limit: PAGE_SIZE },
-              {
-                $project: {
-                  submittedAt: 1,
-                  createdAt: 1,
-                  submittedBy: 1,
-                  submissionStatusId: 1,
-                  answers: 1,
+      const [result] = (await FormSubmissionModule.services.runAggregation({
+        pipeline: [
+          { $match: scope },
+          { $addFields: { sortAt: { $ifNull: ["$submittedAt", "$createdAt"] } } },
+          ...(Object.keys(dateScope).length ? [{ $match: { sortAt: dateScope } }] : []),
+          {
+            $facet: {
+              items: [
+                { $sort: { sortAt: direction, _id: direction } },
+                { $skip: (page - 1) * PAGE_SIZE },
+                { $limit: PAGE_SIZE },
+                {
+                  $project: {
+                    submittedAt: 1,
+                    createdAt: 1,
+                    submittedBy: 1,
+                    submissionStatusId: 1,
+                    answers: 1,
+                  },
                 },
-              },
-            ],
-            count: [{ $count: "value" }],
+              ],
+              count: [{ $count: "value" }],
+            },
           },
-        },
-      ]);
+        ],
+      })) as SubmissionListResult[];
       const submissions = result.items;
       const total = result.count[0]?.value ?? 0;
       const userIds = submissions.flatMap((submission) =>
         submission.submittedBy ? [submission.submittedBy] : [],
       );
       const users = userIds.length
-        ? await User.find({ _id: { $in: userIds } })
-            .select("_id firstName lastName email profilePic")
-            .lean()
+        ? ((await UserModule.services.findMany({
+            query: { _id: { $in: userIds } },
+            selection: "_id firstName lastName email profilePic",
+          })) as Submitter[])
         : [];
       const usersById = new Map(users.map((user) => [String(user._id), user]));
 
