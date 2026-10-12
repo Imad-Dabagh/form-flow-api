@@ -3,12 +3,23 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { DEFAULT_FORM_SUBMISSION_STATUSES, FORM_TYPES } from "#app/modules/_shared/constants";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import Form from "#app/modules/form/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormModule from "#app/modules/form/index";
 import { internalError } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 const PAGE_SIZE = 20;
+
+interface FormListItem {
+  _id: unknown;
+  name: string;
+  type: string;
+  displayMode?: string;
+  isClosed?: boolean;
+  archivedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 /**
  * GET /api/orgs/:organizationSlug/forms
@@ -50,20 +61,18 @@ router.get(
           : {}),
         ...(search ? { name: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } : {}),
       };
-      const [forms, total] = await Promise.all([
-        Form.find(scope)
-          .select("name type displayMode isClosed archivedAt createdAt updatedAt")
-          .sort({ createdAt: -1, _id: -1 })
-          .skip((page - 1) * PAGE_SIZE)
-          .limit(PAGE_SIZE)
-          .lean(),
-        Form.countDocuments(scope),
-      ]);
+      const result = await FormModule.services.fetchAll({
+        query: scope,
+        selection: "name type displayMode isClosed archivedAt createdAt updatedAt",
+        sort: { createdAt: -1, _id: -1 },
+        page,
+        limit: PAGE_SIZE,
+      });
 
       return res.status(200).json({
         success: true,
         data: {
-          items: forms.map((form) => ({
+          items: (result.docs as FormListItem[]).map((form) => ({
             id: String(form._id),
             name: form.name,
             type: form.type,
@@ -73,7 +82,7 @@ router.get(
             createdAt: form.createdAt,
             updatedAt: form.updatedAt,
           })),
-          total,
+          total: result.totalDocs,
           page,
           pageSize: PAGE_SIZE,
         },
@@ -107,28 +116,26 @@ router.post(
 
     try {
       const form = await session.withTransaction(async () => {
-        const [createdForm] = await Form.create(
-          [
-            {
-              organizationId: req.organizationAccess!.organizationId,
-              createdBy: req.auth!.userId,
-              name: req.body.name.trim(),
-              type: req.body.type,
-              displayMode: req.body.displayMode,
-              isClosed: req.body.isClosed,
-            },
-          ],
-          { session },
-        );
+        const createdForm = (await FormModule.services.createOne({
+          payload: {
+            organizationId: req.organizationAccess!.organizationId,
+            createdBy: req.auth!.userId,
+            name: req.body.name.trim(),
+            type: req.body.type,
+            displayMode: req.body.displayMode,
+            isClosed: req.body.isClosed,
+          },
+          session,
+        })) as FormListItem;
 
-        await FormSubmissionStatus.insertMany(
-          DEFAULT_FORM_SUBMISSION_STATUSES.map((status) => ({
+        await FormSubmissionStatusModule.services.createMany({
+          payload: DEFAULT_FORM_SUBMISSION_STATUSES.map((status) => ({
             ...status,
             organizationId: req.organizationAccess!.organizationId,
             formId: createdForm._id,
           })),
-          { session },
-        );
+          session,
+        });
 
         return createdForm;
       });
