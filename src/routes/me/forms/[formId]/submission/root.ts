@@ -2,12 +2,12 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
-import Form from "#app/modules/form/models/index";
+import FormModule from "#app/modules/form/index";
 import { toSubmissionFormPresentation } from "#app/modules/form/submission-form-presentation";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import Membership from "#app/modules/membership/models/index";
-import User from "#app/modules/user/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import MembershipModule from "#app/modules/membership/index";
+import UserModule from "#app/modules/user/index";
 import { badRequest, conflict, notFound } from "#app/utils/errors";
 import {
   assertEditable,
@@ -33,13 +33,15 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
   try {
     const form = await findForm(req.params.formId);
     const userId = req.auth!.userId;
-    const user = await User.findById(userId).select("firstName lastName email phone").lean();
+    const user = (await UserModule.services.fetchById({
+      id: userId,
+      selection: "firstName lastName email phone",
+    })) as Parameters<typeof generateKeywords>[0] | null;
     if (!user) throw notFound("User");
     const searchKeywords = generateKeywords(user);
-    let submission = (await FormSubmission.findOne({
-      formId: form._id,
-      submittedBy: userId,
-    }).lean()) as Submission | null;
+    let submission = (await FormSubmissionModule.services.fetchOne({
+      query: { formId: form._id, submittedBy: userId },
+    })) as Submission | null;
 
     if (!submission) {
       if (form.isClosed) throw formClosed();
@@ -47,26 +49,27 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
       try {
         submission =
           (await session.withTransaction(async () => {
-            const formLock = await Form.updateOne(
-              { _id: form._id, archivedAt: null, isClosed: false },
-              { $inc: { statusRevision: 1 } },
-              { session },
-            );
-            if (formLock.matchedCount !== 1) throw formClosed();
+            const formLock = await FormModule.services.updateOne({
+              query: { _id: form._id, archivedAt: null, isClosed: false },
+              payload: { $inc: { statusRevision: 1 } },
+              session,
+            });
+            if (!formLock) throw formClosed();
 
-            const defaultStatus = await FormSubmissionStatus.findOne({
-              organizationId: form.organizationId,
-              formId: form._id,
-              isDefault: true,
-            })
-              .select("_id")
-              .session(session)
-              .lean();
+            const defaultStatus = (await FormSubmissionStatusModule.services.fetchOne({
+              query: {
+                organizationId: form.organizationId,
+                formId: form._id,
+                isDefault: true,
+              },
+              selection: "_id",
+              session,
+            })) as { _id: mongoose.Types.ObjectId } | null;
             if (!defaultStatus) throw conflict("This form has no default submission status.");
 
-            return (await FormSubmission.findOneAndUpdate(
-              { formId: form._id, submittedBy: userId },
-              {
+            return (await FormSubmissionModule.services.updateOne({
+              query: { formId: form._id, submittedBy: userId },
+              payload: {
                 $setOnInsert: {
                   organizationId: form.organizationId,
                   submissionStatusId: defaultStatus._id,
@@ -75,8 +78,9 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
                   searchKeywords,
                 },
               },
-              { upsert: true, returnDocument: "after", runValidators: true, session },
-            ).lean()) as Submission | null;
+              upsert: true,
+              session,
+            })) as Submission | null;
           })) ?? null;
       } finally {
         await session.endSession();
@@ -84,21 +88,30 @@ router.get<{ formId: string }>("/", async (req, res, next) => {
     }
     if (!submission) throw notFound("Submission");
     if (submission.searchKeywords !== searchKeywords) {
-      await FormSubmission.updateOne({ _id: submission._id }, { $set: { searchKeywords } });
+      await FormSubmissionModule.services.updateById({
+        id: String(submission._id),
+        payload: { $set: { searchKeywords } },
+      });
     }
 
-    await Membership.updateOne(
-      { userId, organizationId: form.organizationId },
-      { $setOnInsert: { role: ORGANIZATION_ROLES.USER } },
-      { upsert: true },
-    );
+    await MembershipModule.services.updateOne({
+      query: { userId, organizationId: form.organizationId },
+      payload: { $setOnInsert: { role: ORGANIZATION_ROLES.USER } },
+      upsert: true,
+    });
 
-    const statuses = await FormSubmissionStatus.find({
-      organizationId: form.organizationId,
-      formId: form._id,
-    })
-      .sort({ order: 1, _id: 1 })
-      .lean();
+    const statuses = (await FormSubmissionStatusModule.services.findMany({
+      query: { organizationId: form.organizationId, formId: form._id },
+      sort: { order: 1, _id: 1 },
+    })) as Array<{
+      _id: mongoose.Types.ObjectId;
+      name: string;
+      description?: string;
+      color: string;
+      order: number;
+      isDefault?: boolean;
+      isSubmissionLocked?: boolean;
+    }>;
 
     return res.status(200).json({
       success: true,
@@ -146,15 +159,16 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
       Object.entries(submission.answers).filter(([id]) => fileIds.has(id)),
     );
     const answers = { ...input.data.formAnswers, ...files };
-    const updated = (await FormSubmission.findOneAndUpdate(
-      {
+    const updated = (await FormSubmissionModule.services.updateOne({
+      query: {
         _id: submission._id,
         submissionStatusId: submission.submissionStatusId,
         submittedAt: submission.submittedAt,
       },
-      { $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers } },
-      { returnDocument: "after", runValidators: true },
-    ).lean()) as Submission | null;
+      payload: {
+        $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers },
+      },
+    })) as Submission | null;
     if (!updated) throw conflict("This submission changed while saving. Reload it and try again.");
 
     return res.status(200).json({ success: true, data: submissionData(updated) });

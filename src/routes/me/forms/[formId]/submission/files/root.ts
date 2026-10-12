@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { validate } from "#app/middlewares/index";
 import { authenticatedUploadRateLimit } from "#app/modules/file-upload/authenticated-rate-limit";
-import FormSubmission from "#app/modules/form-submission/models/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
 import { uploadQuestionFile } from "#app/modules/form-submission/services/upload-question-file";
 import { Logger } from "#app/services/index";
 import { storageProvider, type StoredFileMetadata } from "#app/services/storage/index";
@@ -23,7 +23,7 @@ const router = Router({ mergeParams: true });
 const formIdSchema = z.string().refine(mongoose.isValidObjectId, "A valid form ID is required.");
 
 /** POST /api/me/forms/:formId/submission/files/:questionId */
-router.post(
+router.post<{ formId: string; questionId: string }>(
   "/:questionId",
   authenticatedUploadRateLimit,
   validate({
@@ -32,11 +32,11 @@ router.post(
   }),
   async (req, res, next) => {
     try {
-      const form = await findForm(req.params.formId as string);
+      const form = await findForm(req.params.formId);
       const submission = await findSubmission(form, req.auth!.userId);
       await assertEditable(form, submission);
 
-      const questionId = req.params.questionId as string;
+      const questionId = req.params.questionId;
       const question = visibleQuestions(form).find(
         (item) => item._id === questionId && item.inputType === "file",
       );
@@ -58,13 +58,13 @@ router.post(
         const files = Array.isArray(previous)
           ? previous.filter(isStoredFile).filter((file) => file.id !== replacement?.file.id)
           : [];
-        const updated = (await FormSubmission.findOneAndUpdate(
-          {
+        const updated = (await FormSubmissionModule.services.updateOne({
+          query: {
             _id: submission._id,
             submissionStatusId: submission.submissionStatusId,
             submittedAt: submission.submittedAt,
           },
-          {
+          payload: {
             $set: {
               answers: submission.submittedAt
                 ? validateSavedAnswers(form, {
@@ -74,8 +74,7 @@ router.post(
                 : { ...submission.answers, [questionId]: [...files, uploaded] },
             },
           },
-          { returnDocument: "after", runValidators: true },
-        ).lean()) as Submission | null;
+        })) as Submission | null;
         if (!updated)
           throw conflict("This submission changed while uploading. Reload it and try again.");
         if (replacement) {
@@ -97,18 +96,18 @@ router.post(
 );
 
 /** DELETE /api/me/forms/:formId/submission/files/:fileId */
-router.delete(
+router.delete<{ formId: string; fileId: string }>(
   "/:fileId",
   validate({
     params: z.object({ formId: formIdSchema, fileId: z.string().min(1).max(128) }),
   }),
   async (req, res, next) => {
     try {
-      const form = await findForm(req.params.formId as string);
+      const form = await findForm(req.params.formId);
       const submission = await findSubmission(form, req.auth!.userId);
       await assertEditable(form, submission);
 
-      const fileId = req.params.fileId as string;
+      const fileId = req.params.fileId;
       const entry = storedFiles(submission.answers).find(({ file }) => file.id === fileId);
       if (!entry) throw notFound("Submission file");
 
@@ -119,17 +118,16 @@ router.delete(
       if (remaining.length) answers[entry.questionId] = remaining;
       else delete answers[entry.questionId];
 
-      const updated = (await FormSubmission.findOneAndUpdate(
-        {
+      const updated = (await FormSubmissionModule.services.updateOne({
+        query: {
           _id: submission._id,
           submissionStatusId: submission.submissionStatusId,
           submittedAt: submission.submittedAt,
         },
-        {
+        payload: {
           $set: { answers: submission.submittedAt ? validateSavedAnswers(form, answers) : answers },
         },
-        { returnDocument: "after", runValidators: true },
-      ).lean()) as Submission | null;
+      })) as Submission | null;
       if (!updated)
         throw conflict("This submission changed while removing a file. Reload it and try again.");
 

@@ -3,9 +3,9 @@ import {
   isUploadExtensionInCategory,
   normalizeUploadExtension,
 } from "#app/modules/file-upload/policy";
-import Form from "#app/modules/form/models/index";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
+import FormModule from "#app/modules/form/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
 import {
   validateFormAnswers,
   type SubmissionSection,
@@ -34,22 +34,19 @@ export type Submission = {
 };
 
 export async function findForm(formId: string) {
-  const form = (await Form.findOne({
-    _id: formId,
-    type: "AUTHENTICATED",
-    archivedAt: null,
-  })
-    .select("organizationId name type description sections displayMode isClosed")
-    .lean()) as SubmissionForm | null;
+  const form = (await FormModule.services.fetchById({
+    id: formId,
+    query: { type: "AUTHENTICATED", archivedAt: null },
+    selection: "organizationId name type description sections displayMode isClosed",
+  })) as SubmissionForm | null;
   if (!form) throw notFound("Form");
   return form;
 }
 
 export async function findSubmission(form: SubmissionForm, userId: string) {
-  const submission = (await FormSubmission.findOne({
-    formId: form._id,
-    submittedBy: userId,
-  }).lean()) as Submission | null;
+  const submission = (await FormSubmissionModule.services.fetchOne({
+    query: { formId: form._id, submittedBy: userId },
+  })) as Submission | null;
   if (!submission) throw notFound("Submission");
   return submission;
 }
@@ -60,13 +57,11 @@ export function formClosed() {
 
 export async function assertEditable(form: SubmissionForm, submission: Submission) {
   if (form.isClosed) throw formClosed();
-  const status = await FormSubmissionStatus.findOne({
-    _id: submission.submissionStatusId,
-    organizationId: form.organizationId,
-    formId: form._id,
-  })
-    .select("isSubmissionLocked")
-    .lean();
+  const status = (await FormSubmissionStatusModule.services.fetchById({
+    id: String(submission.submissionStatusId),
+    query: { organizationId: form.organizationId, formId: form._id },
+    selection: "isSubmissionLocked",
+  })) as { isSubmissionLocked?: boolean } | null;
   if (!status || status.isSubmissionLocked) {
     throw conflict("Answers are locked in this submission status.");
   }

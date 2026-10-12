@@ -1,5 +1,5 @@
 import { Router } from "express";
-import FormSubmission from "#app/modules/form-submission/models/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
 import { conflict } from "#app/utils/errors";
 import {
   assertEditable,
@@ -23,11 +23,14 @@ router.put<{ formId: string }>("/", async (req, res, next) => {
     await assertEditable(form, submission);
 
     const answers = validateSavedAnswers(form, submission.answers);
-    const updated = (await FormSubmission.findOneAndUpdate(
-      { _id: submission._id, submissionStatusId: submission.submissionStatusId, submittedAt: null },
-      { $set: { answers, submittedAt: new Date() } },
-      { returnDocument: "after", runValidators: true },
-    ).lean()) as Submission | null;
+    const updated = (await FormSubmissionModule.services.updateOne({
+      query: {
+        _id: submission._id,
+        submissionStatusId: submission.submissionStatusId,
+        submittedAt: null,
+      },
+      payload: { $set: { answers, submittedAt: new Date() } },
+    })) as Submission | null;
     if (updated) return res.status(200).json({ success: true, data: submissionData(updated) });
 
     const latest = await findSubmission(form, req.auth!.userId);
