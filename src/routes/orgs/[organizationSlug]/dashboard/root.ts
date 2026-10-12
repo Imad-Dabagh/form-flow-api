@@ -2,10 +2,10 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import Form from "#app/modules/form/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import User from "#app/modules/user/models/index";
+import FormModule from "#app/modules/form/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import UserModule from "#app/modules/user/index";
 
 const router = Router({ mergeParams: true });
 const DAY_MS = 86_400_000;
@@ -32,6 +32,27 @@ interface RecentSubmission {
   submittedBy: mongoose.Types.ObjectId | null;
   submissionStatusId: mongoose.Types.ObjectId;
   submittedAt: Date;
+}
+
+interface DashboardActivity {
+  byForm: SubmissionTotals[];
+  activity: Array<{ _id: string; count: number }>;
+  recent: RecentSubmission[];
+}
+
+interface DashboardUser {
+  _id: unknown;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  profilePic?: string;
+}
+
+interface DashboardStatus {
+  _id: unknown;
+  formId: unknown;
+  name: string;
+  color: string;
 }
 
 /** GET /api/orgs/:organizationSlug/dashboard */
@@ -75,9 +96,10 @@ router.get(
       const before = new Date(String(req.query.dateBefore));
       const previousFrom = new Date(String(req.query.previousDateFrom));
       const timeZone = String(req.query.timeZone);
-      const forms = await Form.find({ organizationId, archivedAt: null })
-        .select("name type isClosed createdAt")
-        .lean<ActiveForm[]>();
+      const forms = (await FormModule.services.findMany({
+        query: { organizationId, archivedAt: null },
+        selection: "name type isClosed createdAt",
+      })) as ActiveForm[];
       const formsById = new Map(forms.map((form) => [String(form._id), form]));
 
       const result = await readSubmissionActivity({
@@ -107,20 +129,22 @@ router.get(
       const recent = result.recent;
       const [users, statuses] = await Promise.all([
         recent.length
-          ? User.find({
-              _id: { $in: recent.flatMap((item) => (item.submittedBy ? [item.submittedBy] : [])) },
-            })
-              .select("firstName lastName email profilePic")
-              .lean()
+          ? (UserModule.services.findMany({
+              query: {
+                _id: { $in: recent.flatMap((item) => (item.submittedBy ? [item.submittedBy] : [])) },
+              },
+              selection: "firstName lastName email profilePic",
+            }) as Promise<DashboardUser[]>)
           : [],
         recent.length
-          ? FormSubmissionStatus.find({
-              organizationId,
-              _id: { $in: recent.map((item) => item.submissionStatusId) },
-              formId: { $in: recent.map((item) => item.formId) },
-            })
-              .select("formId name color")
-              .lean()
+          ? (FormSubmissionStatusModule.services.findMany({
+              query: {
+                organizationId,
+                _id: { $in: recent.map((item) => item.submissionStatusId) },
+                formId: { $in: recent.map((item) => item.formId) },
+              },
+              selection: "formId name color",
+            }) as Promise<DashboardStatus[]>)
           : [],
       ]);
       const usersById = new Map(users.map((user) => [String(user._id), user]));
@@ -212,75 +236,73 @@ async function readSubmissionActivity({
   timeZone: string;
 }) {
   if (!formIds.length) return { byForm: [], activity: [], recent: [] };
-  const [result] = await FormSubmission.aggregate<{
-    byForm: SubmissionTotals[];
-    activity: Array<{ _id: string; count: number }>;
-    recent: RecentSubmission[];
-  }>([
-    { $match: { organizationId, formId: { $in: formIds } } },
-    { $project: { formId: 1, submittedAt: 1, submittedBy: 1, submissionStatusId: 1 } },
-    {
-      $facet: {
-        byForm: [
-          {
-            $group: {
-              _id: "$formId",
-              submissions: {
-                $sum: {
-                  $cond: [
-                    {
-                      $and: [{ $gte: ["$submittedAt", from] }, { $lt: ["$submittedAt", before] }],
-                    },
-                    1,
-                    0,
-                  ],
+  const [result] = (await FormSubmissionModule.services.runAggregation({
+    pipeline: [
+      { $match: { organizationId, formId: { $in: formIds } } },
+      { $project: { formId: 1, submittedAt: 1, submittedBy: 1, submissionStatusId: 1 } },
+      {
+        $facet: {
+          byForm: [
+            {
+              $group: {
+                _id: "$formId",
+                submissions: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [{ $gte: ["$submittedAt", from] }, { $lt: ["$submittedAt", before] }],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
                 },
-              },
-              previousSubmissions: {
-                $sum: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $gte: ["$submittedAt", previousFrom] },
-                        { $lt: ["$submittedAt", from] },
-                      ],
-                    },
-                    1,
-                    0,
-                  ],
+                previousSubmissions: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gte: ["$submittedAt", previousFrom] },
+                          { $lt: ["$submittedAt", from] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
                 },
+                unfinished: { $sum: { $cond: [{ $eq: ["$submittedAt", null] }, 1, 0] } },
+                lastSubmittedAt: { $max: "$submittedAt" },
               },
-              unfinished: { $sum: { $cond: [{ $eq: ["$submittedAt", null] }, 1, 0] } },
-              lastSubmittedAt: { $max: "$submittedAt" },
             },
-          },
-        ],
-        activity: [
-          { $match: { submittedAt: { $gte: from, $lt: before } } },
-          {
-            $group: {
-              _id: {
-                $dateToString: {
-                  date: "$submittedAt",
-                  format: "%Y-%m-%d",
-                  timezone: timeZone,
+          ],
+          activity: [
+            { $match: { submittedAt: { $gte: from, $lt: before } } },
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    date: "$submittedAt",
+                    format: "%Y-%m-%d",
+                    timezone: timeZone,
+                  },
                 },
+                count: { $sum: 1 },
               },
-              count: { $sum: 1 },
             },
-          },
-          { $sort: { _id: 1 } },
-        ],
-        recent: [
-          { $match: { submittedAt: { $gte: from, $lt: before } } },
-          { $sort: { submittedAt: -1, _id: -1 } },
-          { $limit: 5 },
-          {
-            $project: { formId: 1, submittedBy: 1, submissionStatusId: 1, submittedAt: 1 },
-          },
-        ],
+            { $sort: { _id: 1 } },
+          ],
+          recent: [
+            { $match: { submittedAt: { $gte: from, $lt: before } } },
+            { $sort: { submittedAt: -1, _id: -1 } },
+            { $limit: 5 },
+            {
+              $project: { formId: 1, submittedBy: 1, submissionStatusId: 1, submittedAt: 1 },
+            },
+          ],
+        },
       },
-    },
-  ]);
+    ],
+  })) as DashboardActivity[];
   return result;
 }
