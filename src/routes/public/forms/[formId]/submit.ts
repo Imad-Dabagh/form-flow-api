@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { validate } from "#app/middlewares/index";
 import { submitIdempotently } from "#app/modules/form-submission/services/index";
-import Form from "#app/modules/form/models/index";
+import FormModule from "#app/modules/form/index";
 import { notFound, tooManyRequests } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -20,7 +20,7 @@ const publicSubmissionRateLimit = rateLimit({
 });
 
 /** PUT /api/public/forms/:formId/submissions/submit */
-router.put(
+router.put<{ formId: string }>(
   "/",
   publicSubmissionRateLimit,
   validate({
@@ -30,13 +30,14 @@ router.put(
   }),
   async (req, res, next) => {
     try {
-      const form = await Form.findOne({
-        _id: req.params.formId,
-        type: "PUBLIC",
-        archivedAt: null,
-      })
-        .select("organizationId sections isClosed")
-        .lean();
+      const form = (await FormModule.services.fetchById({
+        id: req.params.formId,
+        query: {
+          type: "PUBLIC",
+          archivedAt: null,
+        },
+        selection: "organizationId sections isClosed",
+      })) as Parameters<typeof submitIdempotently>[1] | null;
       if (!form) throw notFound("Form");
       const { submission, replayed } = await submitIdempotently(req, form);
 

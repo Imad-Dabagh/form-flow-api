@@ -1,10 +1,10 @@
 import type { Request } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import Form from "#app/modules/form/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormModule from "#app/modules/form/index";
 import { AppError, badRequest, conflict, internalError } from "#app/utils/errors";
-import FormSubmission from "../models/index.js";
+import FormSubmissionServices from "./default.js";
 import { receiveSubmission } from "./receive-submission.js";
 import type { SubmissionSection } from "./validate-form-answers.js";
 
@@ -13,6 +13,11 @@ interface SubmissionForm {
   organizationId: mongoose.Types.ObjectId;
   sections: SubmissionSection[];
   isClosed?: boolean;
+}
+
+interface SubmissionReceipt {
+  _id: mongoose.Types.ObjectId;
+  submittedAt: Date;
 }
 
 function isDuplicateKey(error: unknown): boolean {
@@ -28,10 +33,12 @@ export async function submitIdempotently(req: Request, form: SubmissionForm) {
   const query = {
     formId: form._id,
     idempotencyKey,
+    submittedAt: { $ne: null },
   };
-  const existing = await FormSubmission.findOne({ ...query, submittedAt: { $ne: null } })
-    .select("_id submittedAt")
-    .lean();
+  const existing = (await FormSubmissionServices.fetchOne({
+    query,
+    selection: "_id submittedAt",
+  })) as SubmissionReceipt | null;
   if (existing) return { submission: existing, replayed: true };
   if (form.isClosed) {
     throw new AppError("This form is closed.", { statusCode: 409, code: "FORM_CLOSED" });
@@ -46,40 +53,38 @@ export async function submitIdempotently(req: Request, form: SubmissionForm) {
         const session = await mongoose.startSession();
         try {
           const submission = await session.withTransaction(async () => {
-            const formLock = await Form.updateOne(
-              { _id: form._id, type: "PUBLIC", archivedAt: null, isClosed: false },
-              { $inc: { statusRevision: 1 } },
-              { session },
-            );
-            if (formLock.matchedCount !== 1) {
+            const formLock = await FormModule.services.updateOne({
+              query: { _id: form._id, type: "PUBLIC", archivedAt: null, isClosed: false },
+              payload: { $inc: { statusRevision: 1 } },
+              session,
+            });
+            if (!formLock) {
               throw new AppError("This form is closed.", { statusCode: 409, code: "FORM_CLOSED" });
             }
 
-            const defaultStatus = await FormSubmissionStatus.findOne({
-              organizationId: form.organizationId,
-              formId: form._id,
-              isDefault: true,
-            })
-              .select("_id")
-              .session(session)
-              .lean();
+            const defaultStatus = (await FormSubmissionStatusModule.services.fetchOne({
+              query: {
+                organizationId: form.organizationId,
+                formId: form._id,
+                isDefault: true,
+              },
+              selection: "_id",
+              session,
+            })) as { _id: mongoose.Types.ObjectId } | null;
             if (!defaultStatus) throw conflict("This form has no default submission status.");
 
-            const [created] = await FormSubmission.create(
-              [
-                {
-                  organizationId: form.organizationId,
-                  formId: form._id,
-                  submissionStatusId: defaultStatus._id,
-                  submittedBy: null,
-                  idempotencyKey,
-                  submittedAt: new Date(),
-                  answers,
-                },
-              ],
-              { session },
-            );
-            return created;
+            return (await FormSubmissionServices.createOne({
+              payload: {
+                organizationId: form.organizationId,
+                formId: form._id,
+                submissionStatusId: defaultStatus._id,
+                submittedBy: null,
+                idempotencyKey,
+                submittedAt: new Date(),
+                answers,
+              },
+              session,
+            })) as SubmissionReceipt;
           });
           if (!submission) throw internalError();
           return submission;
@@ -91,9 +96,10 @@ export async function submitIdempotently(req: Request, form: SubmissionForm) {
     return { submission, replayed: false };
   } catch (error) {
     if (isDuplicateKey(error)) {
-      const submitted = await FormSubmission.findOne({ ...query, submittedAt: { $ne: null } })
-        .select("_id submittedAt")
-        .lean();
+      const submitted = (await FormSubmissionServices.fetchOne({
+        query,
+        selection: "_id submittedAt",
+      })) as SubmissionReceipt | null;
       if (submitted) return { submission: submitted, replayed: true };
     }
     throw error;
