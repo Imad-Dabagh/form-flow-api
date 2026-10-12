@@ -3,9 +3,9 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { COLOR_FAMILIES } from "#app/modules/_shared/constants";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import Form from "#app/modules/form/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import FormModule from "#app/modules/form/index";
 import { internalError, notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -14,6 +14,16 @@ const params = z.object({
     message: "A valid form ID is required.",
   }),
 });
+
+interface StatusRecord {
+  _id: unknown;
+  name: string;
+  description?: string;
+  color: string;
+  order: number;
+  isDefault?: boolean;
+  isSubmissionLocked?: boolean;
+}
 
 /** GET /api/orgs/:organizationSlug/forms/:formId/submission-statuses */
 router.get<{ formId: string }>(
@@ -24,29 +34,30 @@ router.get<{ formId: string }>(
     try {
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
-      const form = await Form.exists({
-        _id: formId,
-        organizationId,
-        archivedAt: null,
+      const form = await FormModule.services.existsById({
+        id: formId,
+        query: { organizationId, archivedAt: null },
       });
 
       if (!form) throw notFound("Form");
 
       const [statuses, counts] = await Promise.all([
-        FormSubmissionStatus.find({ organizationId, formId }).sort({ order: 1, _id: 1 }).lean(),
-        FormSubmission.aggregate<{
-          _id: mongoose.Types.ObjectId;
-          count: number;
-        }>([
-          {
-            $match: {
-              organizationId: new mongoose.Types.ObjectId(organizationId),
-              formId: new mongoose.Types.ObjectId(formId),
-              submissionStatusId: { $ne: null },
+        FormSubmissionStatusModule.services.findMany({
+          query: { organizationId, formId },
+          sort: { order: 1, _id: 1 },
+        }) as Promise<StatusRecord[]>,
+        FormSubmissionModule.services.runAggregation({
+          pipeline: [
+            {
+              $match: {
+                organizationId: new mongoose.Types.ObjectId(organizationId),
+                formId: new mongoose.Types.ObjectId(formId),
+                submissionStatusId: { $ne: null },
+              },
             },
-          },
-          { $group: { _id: "$submissionStatusId", count: { $sum: 1 } } },
-        ]),
+            { $group: { _id: "$submissionStatusId", count: { $sum: 1 } } },
+          ],
+        }) as Promise<Array<{ _id: mongoose.Types.ObjectId; count: number }>>,
       ]);
 
       const countsById = new Map(counts.map(({ _id, count }) => [String(_id), count]));
@@ -90,42 +101,39 @@ router.post<{ formId: string }>(
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
       const status = await session.withTransaction(async () => {
-        const form = await Form.updateOne(
-          { _id: formId, organizationId, archivedAt: null },
-          { $inc: { statusRevision: 1 } },
-          { session },
-        );
-        if (form.matchedCount !== 1) throw notFound("Form");
-        const lastStatus = await FormSubmissionStatus.findOne({
-          organizationId,
-          formId,
-        })
-          .sort({ order: -1 })
-          .select("order")
-          .session(session)
-          .lean();
+        const form = await FormModule.services.updateById({
+          id: formId,
+          query: { organizationId, archivedAt: null },
+          payload: { $inc: { statusRevision: 1 } },
+          session,
+        });
+        if (!form) throw notFound("Form");
+        const lastStatus = (await FormSubmissionStatusModule.services.fetchOne({
+          query: { organizationId, formId },
+          sort: { order: -1 },
+          selection: "order",
+          session,
+        })) as Pick<StatusRecord, "order"> | null;
         if (req.body.isDefault) {
-          await FormSubmissionStatus.updateMany(
-            { organizationId, formId },
-            { $set: { isDefault: false } },
-            { session },
-          );
+          await FormSubmissionStatusModule.services.updateMany({
+            query: { organizationId, formId },
+            payload: { $set: { isDefault: false } },
+            session,
+          });
         }
-        const [created] = await FormSubmissionStatus.create(
-          [
-            {
-              organizationId,
-              formId,
-              name: req.body.name,
-              description: req.body.description,
-              color: req.body.color,
-              order: (lastStatus?.order ?? 0) + 1,
-              isDefault: req.body.isDefault,
-              isSubmissionLocked: req.body.isSubmissionLocked,
-            },
-          ],
-          { session },
-        );
+        const created = (await FormSubmissionStatusModule.services.createOne({
+          payload: {
+            organizationId,
+            formId,
+            name: req.body.name,
+            description: req.body.description,
+            color: req.body.color,
+            order: (lastStatus?.order ?? 0) + 1,
+            isDefault: req.body.isDefault,
+            isSubmissionLocked: req.body.isSubmissionLocked,
+          },
+          session,
+        })) as StatusRecord;
         return created;
       });
       if (!status) throw internalError();

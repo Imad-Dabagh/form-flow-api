@@ -3,9 +3,9 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { COLOR_FAMILIES } from "#app/modules/_shared/constants";
-import FormSubmissionStatus from "#app/modules/form-submission-status/models/index";
-import FormSubmission from "#app/modules/form-submission/models/index";
-import Form from "#app/modules/form/models/index";
+import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
+import FormSubmissionModule from "#app/modules/form-submission/index";
+import FormModule from "#app/modules/form/index";
 import { conflict, internalError, notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -19,8 +19,18 @@ const params = z.object({
   }),
 });
 
+interface StatusRecord {
+  _id: unknown;
+  name: string;
+  description?: string;
+  color: string;
+  order: number;
+  isDefault?: boolean;
+  isSubmissionLocked?: boolean;
+}
+
 /** GET /api/orgs/:organizationSlug/forms/:formId/submission-statuses/:submissionStatusId */
-router.get(
+router.get<{ formId: string; submissionStatusId: string }>(
   "/",
   authorize("form.read"),
   validate({ params }),
@@ -29,24 +39,20 @@ router.get(
     try {
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
-      const form = await Form.exists({
-        _id: formId,
-        organizationId,
-        archivedAt: null,
+      const form = await FormModule.services.existsById({
+        id: formId,
+        query: { organizationId, archivedAt: null },
       });
 
       if (!form) throw notFound("Form");
-      const status = await FormSubmissionStatus.findOne({
-        organizationId,
-        formId,
-        _id: req.params.submissionStatusId,
-      }).lean();
+      const status = (await FormSubmissionStatusModule.services.fetchById({
+        id: req.params.submissionStatusId,
+        query: { organizationId, formId },
+      })) as StatusRecord | null;
 
       if (!status) throw notFound("Submission status");
-      const submissionCount = await FormSubmission.countDocuments({
-        organizationId,
-        formId,
-        submissionStatusId: status._id,
+      const submissionCount = await FormSubmissionModule.services.countDocuments({
+        query: { organizationId, formId, submissionStatusId: status._id },
       });
 
       return res.status(200).json({
@@ -69,7 +75,7 @@ router.get(
 );
 
 /** PUT /api/orgs/:organizationSlug/forms/:formId/submission-statuses/:submissionStatusId */
-router.put(
+router.put<{ formId: string; submissionStatusId: string }>(
   "/",
   authorize("form.update"),
   validate({
@@ -94,18 +100,19 @@ router.put(
       const organizationId = req.organizationAccess!.organizationId;
       const formId = req.params.formId;
       const status = await session.withTransaction(async () => {
-        const form = await Form.updateOne(
-          { _id: formId, organizationId, archivedAt: null },
-          { $inc: { statusRevision: 1 } },
-          { session },
-        );
+        const form = await FormModule.services.updateById({
+          id: formId,
+          query: { organizationId, archivedAt: null },
+          payload: { $inc: { statusRevision: 1 } },
+          session,
+        });
 
-        if (form.matchedCount !== 1) throw notFound("Form");
-        const target = await FormSubmissionStatus.findOne({
-          organizationId,
-          formId,
-          _id: req.params.submissionStatusId,
-        }).session(session);
+        if (!form) throw notFound("Form");
+        const target = (await FormSubmissionStatusModule.services.fetchById({
+          id: req.params.submissionStatusId,
+          query: { organizationId, formId },
+          session,
+        })) as StatusRecord | null;
 
         if (!target) throw notFound("Submission status");
 
@@ -114,28 +121,19 @@ router.put(
         }
 
         if (req.body.isDefault) {
-          await FormSubmissionStatus.updateMany(
-            { organizationId, formId, _id: { $ne: target._id } },
-            { $set: { isDefault: false } },
-            { session },
-          );
+          await FormSubmissionStatusModule.services.updateMany({
+            query: { organizationId, formId, _id: { $ne: target._id } },
+            payload: { $set: { isDefault: false } },
+            session,
+          });
         }
 
-        if (req.body.name !== undefined) target.name = req.body.name;
-
-        if (req.body.description !== undefined) target.description = req.body.description;
-
-        if (req.body.color !== undefined) target.color = req.body.color;
-
-        if (req.body.isSubmissionLocked !== undefined) {
-          target.isSubmissionLocked = req.body.isSubmissionLocked;
-        }
-
-        if (req.body.isDefault !== undefined) target.isDefault = req.body.isDefault;
-
-        await target.save({ session });
-
-        return target;
+        return (await FormSubmissionStatusModule.services.updateById({
+          id: req.params.submissionStatusId,
+          query: { organizationId, formId },
+          payload: { $set: req.body },
+          session,
+        })) as StatusRecord | null;
       });
 
       if (!status) throw internalError();
@@ -161,61 +159,65 @@ router.put(
 );
 
 /** DELETE /api/orgs/:organizationSlug/forms/:formId/submission-statuses/:submissionStatusId */
-router.delete("/", authorize("form.update"), validate({ params }), async (req, res, next) => {
-  const session = await mongoose.startSession();
-  try {
-    const organizationId = req.organizationAccess!.organizationId;
-    const formId = req.params.formId;
-    await session.withTransaction(async () => {
-      const form = await Form.updateOne(
-        { _id: formId, organizationId, archivedAt: null },
-        { $inc: { statusRevision: 1 } },
-        { session },
-      );
-      if (form.matchedCount !== 1) throw notFound("Form");
-      const status = await FormSubmissionStatus.findOne({
-        organizationId,
-        formId,
-        _id: req.params.submissionStatusId,
-      })
-        .session(session)
-        .lean();
-      if (!status) throw notFound("Submission status");
+router.delete<{ formId: string; submissionStatusId: string }>(
+  "/",
+  authorize("form.update"),
+  validate({ params }),
+  async (req, res, next) => {
+    const session = await mongoose.startSession();
+    try {
+      const organizationId = req.organizationAccess!.organizationId;
+      const formId = req.params.formId;
+      await session.withTransaction(async () => {
+        const form = await FormModule.services.updateById({
+          id: formId,
+          query: { organizationId, archivedAt: null },
+          payload: { $inc: { statusRevision: 1 } },
+          session,
+        });
+        if (!form) throw notFound("Form");
+        const status = (await FormSubmissionStatusModule.services.fetchById({
+          id: req.params.submissionStatusId,
+          query: { organizationId, formId },
+          session,
+        })) as StatusRecord | null;
+        if (!status) throw notFound("Submission status");
 
-      if (status.isDefault) {
-        throw conflict("Choose another default submission status before deleting this one.");
-      }
+        if (status.isDefault) {
+          throw conflict("Choose another default submission status before deleting this one.");
+        }
 
-      const submissionCount = await FormSubmission.countDocuments({
-        organizationId,
-        formId,
-        submissionStatusId: status._id,
-      }).session(session);
+        const submissionCount = await FormSubmissionModule.services.countDocuments({
+          query: { organizationId, formId, submissionStatusId: status._id },
+          session,
+        });
 
-      if (submissionCount > 0) {
-        throw conflict("A submission status in use cannot be deleted.");
-      }
+        if (submissionCount > 0) {
+          throw conflict("A submission status in use cannot be deleted.");
+        }
 
-      await FormSubmissionStatus.deleteOne(
-        { organizationId, formId, _id: status._id },
-        { session },
-      );
+        await FormSubmissionStatusModule.services.deleteById({
+          id: req.params.submissionStatusId,
+          query: { organizationId, formId },
+          session,
+        });
 
-      await FormSubmissionStatus.updateMany(
-        { organizationId, formId, order: { $gt: status.order } },
-        { $inc: { order: -1 } },
-        { session },
-      );
-    });
-    return res.status(200).json({
-      success: true,
-      data: { id: req.params.submissionStatusId },
-    });
-  } catch (error) {
-    return next(error);
-  } finally {
-    await session.endSession();
-  }
-});
+        await FormSubmissionStatusModule.services.updateMany({
+          query: { organizationId, formId, order: { $gt: status.order } },
+          payload: { $inc: { order: -1 } },
+          session,
+        });
+      });
+      return res.status(200).json({
+        success: true,
+        data: { id: req.params.submissionStatusId },
+      });
+    } catch (error) {
+      return next(error);
+    } finally {
+      await session.endSession();
+    }
+  },
+);
 
 export default router;
