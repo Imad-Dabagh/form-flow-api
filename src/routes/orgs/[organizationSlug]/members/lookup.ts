@@ -2,9 +2,9 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import Invitation from "#app/modules/invitation/models/index";
-import Membership from "#app/modules/membership/models/index";
-import User from "#app/modules/user/models/index";
+import InvitationModule from "#app/modules/invitation/index";
+import MembershipModule from "#app/modules/membership/index";
+import UserModule from "#app/modules/user/index";
 import { tooManyRequests } from "#app/utils/errors";
 import { findAuthAccount, teamEmailSchema } from "#app/utils/organization-routes";
 
@@ -34,14 +34,15 @@ router.get(
       const email = (req.query.email as string).trim().toLowerCase();
       const account = await findAuthAccount(email);
       if (!account?.emailVerified) {
-        const pending = await Invitation.findOne({
-          organizationId: req.organizationAccess!.organizationId,
-          email,
-          status: "PENDING",
-          expiresAt: { $gt: new Date() },
-        })
-          .select("role")
-          .lean();
+        const pending = (await InvitationModule.services.fetchOne({
+          query: {
+            organizationId: req.organizationAccess!.organizationId,
+            email,
+            status: "PENDING",
+            expiresAt: { $gt: new Date() },
+          },
+          selection: "role",
+        })) as { role: string } | null;
         if (pending) {
           return res.status(200).json({
             success: true,
@@ -51,16 +52,15 @@ router.get(
         return res.status(200).json({ success: true, data: { kind: "invite", email } });
       }
 
-      const user = await User.findOne({ authUserId: String(account._id) })
-        .select("_id firstName lastName profilePic")
-        .lean();
+      const user = (await UserModule.services.fetchOne({
+        query: { authUserId: String(account._id) },
+        selection: "_id firstName lastName profilePic",
+      })) as { _id: unknown; firstName?: string; lastName?: string; profilePic?: string } | null;
       const membership = user
-        ? await Membership.findOne({
-            organizationId: req.organizationAccess!.organizationId,
-            userId: user._id,
-          })
-            .select("role")
-            .lean()
+        ? ((await MembershipModule.services.fetchOne({
+            query: { organizationId: req.organizationAccess!.organizationId, userId: user._id },
+            selection: "role",
+          })) as { role: string } | null)
         : null;
 
       return res.status(200).json({

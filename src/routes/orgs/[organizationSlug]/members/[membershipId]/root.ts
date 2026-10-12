@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
-import Membership from "#app/modules/membership/models/index";
-import Organization from "#app/modules/organization/models/index";
+import MembershipModule from "#app/modules/membership/index";
+import OrganizationModule from "#app/modules/organization/index";
 import { conflict, notFound } from "#app/utils/errors";
 import { teamRoles } from "#app/utils/organization-routes";
 
@@ -15,11 +15,14 @@ async function requireAnotherAdmin(
   membershipId: string,
   session: mongoose.ClientSession,
 ) {
-  const otherAdminExists = await Membership.exists({
-    organizationId,
-    _id: { $ne: membershipId },
-    role: ORGANIZATION_ROLES.ADMIN,
-  }).session(session);
+  const otherAdminExists = await MembershipModule.services.exists({
+    query: {
+      organizationId,
+      _id: { $ne: membershipId },
+      role: ORGANIZATION_ROLES.ADMIN,
+    },
+    session,
+  });
 
   if (!otherAdminExists) {
     throw conflict("An organization must keep at least one admin.");
@@ -31,18 +34,19 @@ async function lockOrganizationMemberships(
   session: mongoose.ClientSession,
 ) {
   // Role changes in the same organization must serialize before checking the last admin.
-  const result = await Organization.updateOne(
-    { _id: organizationId, archivedAt: null },
-    { $inc: { membershipRevision: 1 } },
-    { session },
-  );
-  if (!result.matchedCount) throw notFound("Organization");
+  const organization = await OrganizationModule.services.updateById({
+    id: organizationId,
+    query: { archivedAt: null },
+    payload: { $inc: { membershipRevision: 1 } },
+    session,
+  });
+  if (!organization) throw notFound("Organization");
 }
 
 /**
  * PUT /api/orgs/:organizationSlug/members/:membershipId
  */
-router.put(
+router.put<{ membershipId: string }>(
   "/",
   authorize("membership.update"),
   validate({
@@ -65,16 +69,16 @@ router.put(
   async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
-      const membershipId = req.params.membershipId as string;
+      const membershipId = req.params.membershipId;
       const body = req.body;
 
       const result = await session.withTransaction(async () => {
         await lockOrganizationMemberships(req.organizationAccess!.organizationId, session);
-        const membership = await Membership.findOne({
-          _id: membershipId,
-          organizationId: req.organizationAccess!.organizationId,
-          role: { $in: teamRoles },
-        }).session(session);
+        const membership = (await MembershipModule.services.fetchById({
+          id: membershipId,
+          query: { organizationId: req.organizationAccess!.organizationId, role: { $in: teamRoles } },
+          session,
+        })) as { _id: unknown; role: string } | null;
         if (!membership) throw notFound("Membership");
 
         if (
@@ -84,9 +88,14 @@ router.put(
           await requireAnotherAdmin(req.organizationAccess!.organizationId, membershipId, session);
         }
 
-        membership.role = body.role as typeof membership.role;
-        await membership.save({ session });
-        return { id: String(membership._id), role: membership.role };
+        const updated = (await MembershipModule.services.updateById({
+          id: membershipId,
+          query: { organizationId: req.organizationAccess!.organizationId, role: { $in: teamRoles } },
+          payload: { $set: { role: body.role } },
+          session,
+        })) as { _id: unknown; role: string } | null;
+        if (!updated) throw notFound("Membership");
+        return { id: String(updated._id), role: updated.role };
       });
       return res.status(200).json({
         success: true,
@@ -103,7 +112,7 @@ router.put(
 /**
  * DELETE /api/orgs/:organizationSlug/members/:membershipId
  */
-router.delete(
+router.delete<{ membershipId: string }>(
   "/",
   authorize("membership.delete"),
   validate({
@@ -116,22 +125,26 @@ router.delete(
   async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
-      const membershipId = req.params.membershipId as string;
+      const membershipId = req.params.membershipId;
 
       await session.withTransaction(async () => {
         await lockOrganizationMemberships(req.organizationAccess!.organizationId, session);
-        const membership = await Membership.findOne({
-          _id: membershipId,
-          organizationId: req.organizationAccess!.organizationId,
-          role: { $in: teamRoles },
-        }).session(session);
+        const membership = (await MembershipModule.services.fetchById({
+          id: membershipId,
+          query: { organizationId: req.organizationAccess!.organizationId, role: { $in: teamRoles } },
+          session,
+        })) as { _id: unknown; role: string } | null;
         if (!membership) throw notFound("Membership");
 
         if (membership.role === ORGANIZATION_ROLES.ADMIN) {
           await requireAnotherAdmin(req.organizationAccess!.organizationId, membershipId, session);
         }
 
-        await membership.deleteOne({ session });
+        await MembershipModule.services.deleteById({
+          id: membershipId,
+          query: { organizationId: req.organizationAccess!.organizationId, role: { $in: teamRoles } },
+          session,
+        });
       });
       return res.status(200).json({ success: true, data: { id: membershipId } });
     } catch (error) {

@@ -6,16 +6,36 @@ import { z } from "zod";
 import config from "#app/config/index";
 import { authorize, validate } from "#app/middlewares/index";
 import { ORGANIZATION_ROLES } from "#app/modules/_shared/constants";
-import Invitation from "#app/modules/invitation/models/index";
-import Membership from "#app/modules/membership/models/index";
-import Organization from "#app/modules/organization/models/index";
-import User from "#app/modules/user/models/index";
+import InvitationModule from "#app/modules/invitation/index";
+import MembershipModule from "#app/modules/membership/index";
+import OrganizationModule from "#app/modules/organization/index";
+import UserModule from "#app/modules/user/index";
 import { ensureUserProfile } from "#app/modules/user/services/index";
 import { sendOrganizationInvitationEmail } from "#app/services/email/send-email";
 import { conflict, internalError, notFound, tooManyRequests } from "#app/utils/errors";
 import { findAuthAccount, teamEmailSchema, teamRoles } from "#app/utils/organization-routes";
 
 const router = Router({ mergeParams: true });
+
+interface TeamMembership {
+  _id: unknown;
+  userId: unknown;
+  role: string;
+  createdAt: Date;
+}
+
+interface TeamUser {
+  _id: unknown;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  profilePic?: string;
+}
+
+interface PendingInvitation {
+  _id: unknown;
+  expiresAt: Date;
+}
 
 const memberAddRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -33,19 +53,19 @@ const memberAddRateLimit = rateLimit({
  */
 router.get("/", authorize("membership.read"), async (req, res, next) => {
   try {
-    const memberships = await Membership.find({
-      organizationId: req.organizationAccess!.organizationId,
-      role: { $in: teamRoles },
-    })
-      .select("userId role createdAt")
-      .sort({ role: 1, createdAt: 1 })
-      .lean();
+    const memberships = (await MembershipModule.services.findMany({
+      query: {
+        organizationId: req.organizationAccess!.organizationId,
+        role: { $in: teamRoles },
+      },
+      selection: "userId role createdAt",
+      sort: { role: 1, createdAt: 1 },
+    })) as TeamMembership[];
 
-    const users = await User.find({
-      _id: { $in: memberships.map((membership) => membership.userId) },
-    })
-      .select("firstName lastName email profilePic")
-      .lean();
+    const users = (await UserModule.services.findMany({
+      query: { _id: { $in: memberships.map((membership) => membership.userId) } },
+      selection: "firstName lastName email profilePic",
+    })) as TeamUser[];
     const usersById = new Map(users.map((user) => [String(user._id), user]));
 
     return res.status(200).json({
@@ -106,27 +126,35 @@ router.post(
         let membershipId: string | undefined;
         try {
           membershipId = await session.withTransaction(async () => {
-            const existing = await Membership.findOne({
-              organizationId: req.organizationAccess!.organizationId,
-              userId: user._id,
-            }).session(session);
+            const existing = (await MembershipModule.services.fetchOne({
+              query: { organizationId: req.organizationAccess!.organizationId, userId: user._id },
+              session,
+            })) as TeamMembership | null;
             if (existing && existing.role !== ORGANIZATION_ROLES.USER) {
               throw conflict("This person is already a team member. Edit their role in the table.");
             }
 
-            const membership =
-              existing ??
-              new Membership({
-                organizationId: req.organizationAccess!.organizationId,
-                userId: user._id,
-              });
-            membership.role = body.role;
-            await membership.save({ session });
-            await Invitation.updateMany(
-              { organizationId: req.organizationAccess!.organizationId, email, status: "PENDING" },
-              { $set: { status: "CANCELLED" } },
-              { session },
-            );
+            const membership = existing
+              ? ((await MembershipModule.services.updateById({
+                  id: String(existing._id),
+                  query: { organizationId: req.organizationAccess!.organizationId },
+                  payload: { $set: { role: body.role } },
+                  session,
+                })) as TeamMembership | null)
+              : ((await MembershipModule.services.createOne({
+                  payload: {
+                    organizationId: req.organizationAccess!.organizationId,
+                    userId: user._id,
+                    role: body.role,
+                  },
+                  session,
+                })) as TeamMembership);
+            if (!membership) throw internalError();
+            await InvitationModule.services.updateMany({
+              query: { organizationId: req.organizationAccess!.organizationId, email, status: "PENDING" },
+              payload: { $set: { status: "CANCELLED" } },
+              session,
+            });
             return String(membership._id);
           });
         } finally {
@@ -139,33 +167,37 @@ router.post(
         });
       }
 
-      const organization = await Organization.findById(req.organizationAccess!.organizationId)
-        .select("name logo primaryColor")
-        .lean();
+      const organization = (await OrganizationModule.services.fetchById({
+        id: req.organizationAccess!.organizationId,
+        selection: "name logo primaryColor",
+      })) as { _id: unknown; name: string; logo: string; primaryColor: string } | null;
       if (!organization) throw notFound("Organization");
 
-      const pending = await Invitation.findOne({
-        organizationId: organization._id,
-        email,
-        status: "PENDING",
-      });
+      const pending = (await InvitationModule.services.fetchOne({
+        query: { organizationId: organization._id, email, status: "PENDING" },
+      })) as PendingInvitation | null;
       if (pending) {
         if (pending.expiresAt > new Date()) {
           throw conflict("An invitation is already pending for this email.");
         }
-        pending.status = "EXPIRED";
-        await pending.save();
+        await InvitationModule.services.updateById({
+          id: String(pending._id),
+          query: { organizationId: organization._id, status: "PENDING" },
+          payload: { $set: { status: "EXPIRED" } },
+        });
       }
 
       const token = randomBytes(32).toString("hex");
-      const invitation = await Invitation.create({
-        organizationId: organization._id,
-        email,
-        role: body.role,
-        invitedBy: req.auth!.userId,
-        tokenHash: createHash("sha256").update(token).digest("hex"),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      });
+      const invitation = (await InvitationModule.services.createOne({
+        payload: {
+          organizationId: organization._id,
+          email,
+          role: body.role,
+          invitedBy: req.auth!.userId,
+          tokenHash: createHash("sha256").update(token).digest("hex"),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      })) as { _id: unknown };
 
       const requestOrigin = req.get("origin");
       const frontendOrigin =
@@ -183,7 +215,7 @@ router.post(
           url,
         });
       } catch (error) {
-        await invitation.deleteOne();
+        await InvitationModule.services.deleteById({ id: String(invitation._id) });
         throw error;
       }
 
