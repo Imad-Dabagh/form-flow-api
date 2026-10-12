@@ -1,24 +1,27 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticate, validate } from "#app/middlewares/index";
-import Membership from "#app/modules/membership/models/index";
-import User from "#app/modules/user/models/index";
+import MembershipModule from "#app/modules/membership/index";
+import UserModule from "#app/modules/user/index";
 import { unauthenticated } from "#app/utils/errors";
 import { httpsUrlSchema } from "#app/utils/https-url-schema";
 
 const router = Router();
+
+interface ProfileUser {
+  _id: unknown;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  profilePic?: string;
+  coverPhoto?: string;
+  phone?: string;
+  shortDescription?: string;
+  onboardingCompletedAt?: Date | null;
+}
+
 function toProfileResponse(
-  user: {
-    _id: unknown;
-    email: string;
-    firstName?: string;
-    lastName?: string;
-    profilePic?: string;
-    coverPhoto?: string;
-    phone?: string;
-    shortDescription?: string;
-    onboardingCompletedAt?: Date | null;
-  },
+  user: ProfileUser,
   auth: { isEmailVerified: boolean; isSuperAdmin: boolean },
 ) {
   return {
@@ -41,7 +44,9 @@ function toProfileResponse(
  */
 router.get("/", authenticate, async (req, res, next) => {
   try {
-    const user = await User.findById(req.auth!.userId);
+    const user = (await UserModule.services.fetchById({
+      id: req.auth!.userId,
+    })) as ProfileUser | null;
 
     if (!user) {
       throw unauthenticated();
@@ -103,39 +108,44 @@ router.put(
       const coverPhoto = body.coverPhoto?.trim();
       const phone = body.phone?.trim();
       const shortDescription = body.shortDescription?.trim();
-      const user = await User.findById(req.auth!.userId);
+      const user = (await UserModule.services.fetchById({
+        id: req.auth!.userId,
+      })) as ProfileUser | null;
 
       if (!user) {
         throw unauthenticated();
       }
 
-      user.firstName = firstName;
-      user.lastName = lastName;
+      const updates: Record<string, string | Date> = { firstName, lastName };
       if (profilePic !== undefined) {
-        user.profilePic = profilePic;
+        updates.profilePic = profilePic;
       }
       if (coverPhoto !== undefined) {
-        user.coverPhoto = coverPhoto;
+        updates.coverPhoto = coverPhoto;
       }
       if (phone !== undefined) {
-        user.phone = phone;
+        updates.phone = phone;
       }
       if (shortDescription !== undefined) {
-        user.shortDescription = shortDescription;
+        updates.shortDescription = shortDescription;
       }
-      const hasOrganization = await Membership.exists({
-        userId: req.auth!.userId,
+      const hasOrganization = await MembershipModule.services.exists({
+        query: { userId: req.auth!.userId },
       });
 
-      if (hasOrganization) {
-        user.onboardingCompletedAt ??= new Date();
+      if (hasOrganization && !user.onboardingCompletedAt) {
+        updates.onboardingCompletedAt = new Date();
       }
 
-      await user.save();
+      const updatedUser = (await UserModule.services.updateById({
+        id: req.auth!.userId,
+        payload: { $set: updates },
+      })) as ProfileUser | null;
+      if (!updatedUser) throw unauthenticated();
 
       return res.status(200).json({
         success: true,
-        data: toProfileResponse(user, req.auth!),
+        data: toProfileResponse(updatedUser, req.auth!),
       });
     } catch (error) {
       return next(error);
