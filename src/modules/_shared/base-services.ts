@@ -1,4 +1,11 @@
-import type { ClientSession, Model, PipelineStage, PopulateOptions, UpdateQuery } from "mongoose";
+import type {
+  AnyBulkWriteOperation,
+  ClientSession,
+  Model,
+  PipelineStage,
+  PopulateOptions,
+  UpdateQuery,
+} from "mongoose";
 import Logger from "#app/services/logger/index";
 import { notFound } from "#app/utils/errors";
 
@@ -18,13 +25,16 @@ export interface baseServiceDataPropI {
   limit?: number;
   field?: string;
   pipeline?: PipelineStage[];
+  operations?: AnyBulkWriteOperation<Entity>[];
   session?: ClientSession;
+  upsert?: boolean;
 }
 
 type WithId = baseServiceDataPropI & { id: string };
 type WithQuery = baseServiceDataPropI & { query: Query };
 type WithField = baseServiceDataPropI & { field: string };
 type WithPipeline = baseServiceDataPropI & { pipeline: PipelineStage[] };
+type WithOperations = baseServiceDataPropI & { operations: AnyBulkWriteOperation<Entity>[] };
 type WithPayload = baseServiceDataPropI & { payload: Entity };
 type WithPayloads = baseServiceDataPropI & { payload: Entity[] };
 type WithQueryAndPayload = WithQuery & { payload: Entity };
@@ -370,7 +380,7 @@ async function createMany(
   );
 }
 
-/** Updates the first record matching a required filter and returns the updated plain object or null. */
+/** Updates the first matching record, optionally inserting it, and returns the resulting plain object or null. */
 async function updateOne(
   Model: Model<Entity>,
   data: WithQueryAndPayload,
@@ -379,7 +389,7 @@ async function updateOne(
   const updateQuery = Model.findOneAndUpdate(
     requireQuery(data.query),
     requireUpdatePayload(data.payload),
-    { returnDocument: "after", runValidators: true },
+    { returnDocument: "after", runValidators: true, upsert: data.upsert ?? false },
   ).lean();
   if (data.selection) updateQuery.select(data.selection);
   if (typeof data.populate === "string") updateQuery.populate(data.populate);
@@ -463,6 +473,15 @@ async function deleteMany(
   return decorate(result, config);
 }
 
+/** Runs a validated set of bulk writes in one database operation, optionally in a transaction. */
+async function bulkWrite(Model: Model<Entity>, data: WithOperations) {
+  if (!data.operations.length) {
+    throw new Error("At least one bulk operation is required");
+  }
+
+  return Model.bulkWrite(data.operations, { session: data.session });
+}
+
 /** Runs an aggregation with pagination and returns its results with pagination metadata. */
 async function aggregatePage(
   Model: Model<Entity>,
@@ -544,6 +563,7 @@ function BaseServices(Model: Model<Entity>) {
     deleteById: wrapHelper(Model, deleteById),
     deleteOne: wrapHelper(Model, deleteOne),
     deleteMany: wrapHelper(Model, deleteMany),
+    bulkWrite: wrapHelper(Model, bulkWrite),
     aggregatePage: wrapHelper(Model, aggregatePage),
     runAggregation: wrapHelper(Model, runAggregation),
   };
