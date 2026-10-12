@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authorize } from "#app/middlewares/index";
-import Invitation from "#app/modules/invitation/models/index";
+import InvitationModule from "#app/modules/invitation/index";
 
 const router = Router({ mergeParams: true });
 
@@ -9,13 +9,17 @@ const router = Router({ mergeParams: true });
  */
 router.get("/", authorize("membership.read"), async (req, res, next) => {
   try {
-    const invitations = await Invitation.find({
-      organizationId: req.organizationAccess!.organizationId,
-      status: "PENDING",
-    })
-      .select("email role createdAt expiresAt")
-      .sort({ createdAt: -1 })
-      .lean();
+    const invitations = (await InvitationModule.services.findMany({
+      query: { organizationId: req.organizationAccess!.organizationId, status: "PENDING" },
+      selection: "email role createdAt expiresAt",
+      sort: { createdAt: -1 },
+    })) as Array<{
+      _id: unknown;
+      email: string;
+      role: string;
+      createdAt: Date;
+      expiresAt: Date;
+    }>;
     const now = Date.now();
 
     return res.status(200).json({

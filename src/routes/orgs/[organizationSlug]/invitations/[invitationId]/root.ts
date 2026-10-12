@@ -2,7 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
-import Invitation from "#app/modules/invitation/models/index";
+import InvitationModule from "#app/modules/invitation/index";
 import { notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -10,7 +10,7 @@ const router = Router({ mergeParams: true });
 /**
  * DELETE /api/orgs/:organizationSlug/invitations/:invitationId
  */
-router.delete(
+router.delete<{ invitationId: string }>(
   "/",
   authorize("membership.delete"),
   validate({
@@ -22,17 +22,17 @@ router.delete(
   }),
   async (req, res, next) => {
     try {
-      const invitationId = req.params.invitationId as string;
+      const invitationId = req.params.invitationId;
 
-      const invitation = await Invitation.findOneAndUpdate(
-        {
-          _id: invitationId,
+      const invitation = await InvitationModule.services.updateById({
+        id: invitationId,
+        query: {
           organizationId: req.organizationAccess!.organizationId,
           status: "PENDING",
           expiresAt: { $gt: new Date() },
         },
-        { $set: { status: "CANCELLED" } },
-      );
+        payload: { $set: { status: "CANCELLED" } },
+      });
       if (!invitation) throw notFound("Invitation");
 
       return res.status(200).json({ success: true, data: { id: invitationId } });
