@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
 import { COLOR_FAMILIES } from "#app/modules/_shared/constants";
-import Organization from "#app/modules/organization/models/index";
+import OrganizationModule from "#app/modules/organization/index";
 import { notFound } from "#app/utils/errors";
 import { httpsUrlSchema } from "#app/utils/https-url-schema";
 import { primaryColorSchema, toOrganizationResponse } from "#app/utils/organization-routes";
@@ -61,11 +61,11 @@ router.put(
         updates.shortDescription = body.shortDescription.trim();
       }
 
-      const organization = await Organization.findOneAndUpdate(
-        { _id: req.organizationAccess!.organizationId, archivedAt: null },
-        { $set: updates },
-        { returnDocument: "after", runValidators: true },
-      );
+      const organization = (await OrganizationModule.services.updateById({
+        id: req.organizationAccess!.organizationId,
+        query: { archivedAt: null },
+        payload: { $set: updates },
+      })) as Parameters<typeof toOrganizationResponse>[0] | null;
 
       if (!organization) throw notFound("Organization");
 
