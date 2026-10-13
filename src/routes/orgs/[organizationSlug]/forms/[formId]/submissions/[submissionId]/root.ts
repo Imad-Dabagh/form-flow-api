@@ -2,10 +2,11 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { authorize, validate } from "#app/middlewares/index";
+import FormSubmissionStatusHistoryModule from "#app/modules/form-submission-status-history/index";
 import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
 import FormSubmissionModule from "#app/modules/form-submission/index";
 import FormModule from "#app/modules/form/index";
-import { internalError, notFound } from "#app/utils/errors";
+import { conflict, internalError, notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
 
@@ -50,16 +51,42 @@ router.put<{ formId: string; submissionId: string }>(
         })) as { _id: unknown } | null;
         if (!status) throw notFound("Submission status");
 
-        const updated = (await FormSubmissionModule.services.updateById({
+        const currentStatus = (await FormSubmissionModule.services.fetchById({
           id: req.params.submissionId,
           query: { organizationId, formId },
+          selection: "_id submissionStatusId updatedAt",
+          session,
+        })) as { _id: unknown; submissionStatusId: unknown; updatedAt: Date } | null;
+
+        if (!currentStatus) throw notFound("Submission");
+
+        if (String(currentStatus.submissionStatusId) === String(status._id)) {
+          return currentStatus;
+        }
+
+        const updatedStatus = (await FormSubmissionModule.services.updateById({
+          id: req.params.submissionId,
+          query: { organizationId, formId, submissionStatusId: currentStatus.submissionStatusId },
           payload: { $set: { submissionStatusId: status._id } },
           selection: "_id submissionStatusId updatedAt",
           session,
         })) as { _id: unknown; submissionStatusId: unknown; updatedAt: Date } | null;
-        if (!updated) throw notFound("Submission");
-        return updated;
+        if (!updatedStatus) throw conflict("This submission changed. Reload it and try again.");
+
+        await FormSubmissionStatusHistoryModule.services.createOne({
+          payload: {
+            organizationId,
+            formId,
+            submissionId: currentStatus._id,
+            fromStatusId: currentStatus.submissionStatusId,
+            toStatusId: status._id,
+            changedBy: req.auth!.userId,
+          },
+          session,
+        });
+        return updatedStatus;
       });
+
       if (!submission) throw internalError();
 
       return res.status(200).json({
