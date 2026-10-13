@@ -22,7 +22,7 @@ const memberLookupRateLimit = rateLimit({
 });
 
 /**
- * GET /api/orgs/:organizationSlug/members/lookup?email=...
+ * GET /api/orgs/:organizationSlug/members/lookup?email=<email>
  */
 router.get(
   "/",
