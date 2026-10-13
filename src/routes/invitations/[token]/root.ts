@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticate, validate } from "#app/middlewares/index";
-import Invitation from "#app/modules/invitation/models/index";
-import Organization from "#app/modules/organization/models/index";
+import InvitationModule from "#app/modules/invitation/index";
+import OrganizationModule from "#app/modules/organization/index";
 import { notFound, unauthorized } from "#app/utils/errors";
 import { getTokenHash } from "#app/utils/invitation-token";
 
@@ -11,7 +11,7 @@ const router = Router({ mergeParams: true });
 /**
  * GET /api/invitations/:token
  */
-router.get(
+router.get<{ token: string }>(
   "/",
   authenticate,
   validate({
@@ -23,22 +23,23 @@ router.get(
   }),
   async (req, res, next) => {
     try {
-      const tokenHash = getTokenHash(req.params.token as string);
-      const invitation = await Invitation.findOne({
-        tokenHash,
-        status: "PENDING",
-        expiresAt: { $gt: new Date() },
-      });
+      const tokenHash = getTokenHash(req.params.token);
+      const invitation = (await InvitationModule.services.fetchOne({
+        query: { tokenHash, status: "PENDING", expiresAt: { $gt: new Date() } },
+      })) as {
+        organizationId: unknown;
+        email: string;
+        role: string;
+        expiresAt: Date;
+      } | null;
       if (!invitation) throw notFound("Invitation");
       if (invitation.email !== req.auth!.email) throw unauthorized();
 
-      const organization = await Organization.findOne({
-        _id: invitation.organizationId,
-        archivedAt: null,
-        isDisabled: false,
-      })
-        .select("name slug")
-        .lean();
+      const organization = (await OrganizationModule.services.fetchById({
+        id: String(invitation.organizationId),
+        query: { archivedAt: null, isDisabled: false },
+        selection: "name slug",
+      })) as { name: string; slug: string } | null;
       if (!organization) throw notFound("Organization");
 
       return res.status(200).json({
