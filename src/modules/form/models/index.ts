@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { SUB_DOCUMENTS } from "#app/modules/_shared/index";
 import { FORM_TYPES } from "#app/modules/_shared/constants";
 
-const { FormSectionSchema } = SUB_DOCUMENTS;
+const { FormSectionSchema, FormCriterionSchema } = SUB_DOCUMENTS;
 
 const formSchema = new mongoose.Schema(
   {
@@ -29,6 +29,14 @@ const formSchema = new mongoose.Schema(
     },
     sections: {
       type: [FormSectionSchema],
+      default: [],
+    },
+    isReviewEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    formCriteria: {
+      type: [FormCriterionSchema],
       default: [],
     },
     displayMode: {
