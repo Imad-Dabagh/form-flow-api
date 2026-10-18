@@ -16,6 +16,7 @@ interface FormListItem {
   type: string;
   displayMode?: string;
   isClosed?: boolean;
+  isReviewEnabled?: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -109,6 +110,7 @@ router.post(
       type: z.enum(FORM_TYPES),
       displayMode: z.enum(["SINGLE_PAGE", "WIZARD"]),
       isClosed: z.boolean(),
+      isReviewEnabled: z.boolean().optional(),
     }),
   }),
   async (req, res, next) => {
@@ -124,6 +126,7 @@ router.post(
             type: req.body.type,
             displayMode: req.body.displayMode,
             isClosed: req.body.isClosed,
+            isReviewEnabled: req.body.isReviewEnabled ?? false,
           },
           session,
         })) as FormListItem;
@@ -150,6 +153,7 @@ router.post(
           type: form.type,
           displayMode: form.displayMode,
           isClosed: form.isClosed,
+          isReviewEnabled: form.isReviewEnabled ?? false,
           createdAt: form.createdAt,
           updatedAt: form.updatedAt,
         },
