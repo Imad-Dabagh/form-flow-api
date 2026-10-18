@@ -70,3 +70,13 @@ export const FormSectionSchema = new mongoose.Schema(
   },
   { _id: false },
 );
+
+export const FormCriterionSchema = new mongoose.Schema(
+  {
+    _id: { type: String },
+    title: { type: String, trim: true },
+    description: { type: String, trim: true },
+    coefficient: { type: Number },
+  },
+  { _id: false },
+);
