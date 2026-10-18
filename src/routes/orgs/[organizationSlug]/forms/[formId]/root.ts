@@ -20,6 +20,8 @@ type FormDataSource = {
   type: string;
   description: string;
   sections: unknown[];
+  isReviewEnabled?: boolean;
+  formCriteria?: unknown[];
   displayMode?: string;
   isClosed?: boolean;
   createdAt: Date;
@@ -33,6 +35,8 @@ function toFormData(form: FormDataSource) {
     type: form.type,
     description: form.description,
     sections: form.sections,
+    isReviewEnabled: form.isReviewEnabled ?? false,
+    formCriteria: form.formCriteria ?? [],
     displayMode: form.displayMode ?? "SINGLE_PAGE",
     isClosed: form.isClosed ?? false,
     createdAt: form.createdAt,
@@ -56,7 +60,7 @@ router.get<{ formId: string }>(
       const form = (await FormModule.services.fetchById({
         id: req.params.formId,
         query: { organizationId: req.organizationAccess!.organizationId, archivedAt: null },
-        selection: "name type description sections displayMode isClosed createdAt updatedAt",
+        selection: "name type description sections isReviewEnabled formCriteria displayMode isClosed createdAt updatedAt",
       })) as FormDataSource | null;
       if (!form) throw notFound("Form");
 
@@ -86,7 +90,7 @@ router.put<{ formId: string }>(
         id: req.params.formId,
         query: { organizationId: req.organizationAccess!.organizationId, archivedAt: null },
         payload: { $set: req.body },
-        selection: "name type description sections displayMode isClosed createdAt updatedAt",
+        selection: "name type description sections isReviewEnabled formCriteria displayMode isClosed createdAt updatedAt",
       })) as FormDataSource | null;
       if (!form) throw notFound("Form");
 
@@ -108,6 +112,7 @@ router.put<{ formId: string }>(
       type: z.enum(FORM_TYPES),
       displayMode: z.enum(["SINGLE_PAGE", "WIZARD"]),
       isClosed: z.boolean(),
+      isReviewEnabled: z.boolean().optional(),
     }),
   }),
   async (req, res, next) => {
@@ -121,10 +126,13 @@ router.put<{ formId: string }>(
             type: req.body.type,
             displayMode: req.body.displayMode,
             isClosed: req.body.isClosed,
+            ...(req.body.isReviewEnabled !== undefined
+              ? { isReviewEnabled: req.body.isReviewEnabled }
+              : {}),
           },
         },
-        selection: "name type displayMode isClosed updatedAt",
-      })) as Pick<FormDataSource, "_id" | "name" | "type" | "displayMode" | "isClosed" | "updatedAt"> | null;
+        selection: "name type displayMode isClosed isReviewEnabled updatedAt",
+      })) as Pick<FormDataSource, "_id" | "name" | "type" | "displayMode" | "isClosed" | "isReviewEnabled" | "updatedAt"> | null;
       if (!form) throw notFound("Form");
 
       return res.status(200).json({
@@ -135,6 +143,49 @@ router.put<{ formId: string }>(
           type: form.type,
           displayMode: form.displayMode,
           isClosed: form.isClosed,
+          isReviewEnabled: form.isReviewEnabled ?? false,
+          updatedAt: form.updatedAt,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+/** PUT /api/orgs/:organizationSlug/forms/:formId/review-criteria */
+router.put<{ formId: string }>(
+  "/review-criteria",
+  authorize("form.update"),
+  validate({
+    params: z.object({ formId: formIdSchema }),
+    body: z.strictObject({
+      formCriteria: z.array(z.strictObject({
+        _id: z.string().min(1),
+        title: z.string().trim().min(1),
+        description: z.string().trim(),
+        coefficient: z.number().finite().min(1),
+      })).refine(
+        (criteria) => new Set(criteria.map((criterion) => criterion._id)).size === criteria.length,
+        "Criterion IDs must be unique.",
+      ),
+    }),
+  }),
+  async (req, res, next) => {
+    try {
+      const form = (await FormModule.services.updateById({
+        id: req.params.formId,
+        query: { organizationId: req.organizationAccess!.organizationId, archivedAt: null },
+        payload: { $set: req.body },
+        selection: "formCriteria updatedAt",
+      })) as { _id: unknown; formCriteria: unknown[]; updatedAt: Date } | null;
+      if (!form) throw notFound("Form");
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: String(form._id),
+          formCriteria: form.formCriteria,
           updatedAt: form.updatedAt,
         },
       });
