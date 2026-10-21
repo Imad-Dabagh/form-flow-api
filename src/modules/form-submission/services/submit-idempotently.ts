@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
 import FormModule from "#app/modules/form/index";
+import { assertActiveOrganization } from "#app/modules/organization/services/index";
 import { AppError, badRequest, conflict, internalError } from "#app/utils/errors";
 import FormSubmissionServices from "./default.js";
 import { receiveSubmission } from "./receive-submission.js";
@@ -29,6 +30,8 @@ export async function submitIdempotently(req: Request, form: SubmissionForm) {
   if (!idempotencyKey || !z.uuid().safeParse(idempotencyKey).success) {
     throw badRequest("A valid Idempotency-Key header is required.");
   }
+
+  await assertActiveOrganization(String(form.organizationId));
 
   const query = {
     formId: form._id,

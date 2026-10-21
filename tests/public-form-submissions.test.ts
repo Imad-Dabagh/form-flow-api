@@ -7,7 +7,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
 import FormSubmissionStatus from "../src/modules/form-submission-status/models/index.js";
 import Form from "../src/modules/form/models/index.js";
-import publicSubmit from "../src/routes/public/forms/[formId]/submit.js";
+import Organization from "../src/modules/organization/models/index.js";
+import publicRoutes from "../src/routes/public/index.js";
 
 const organizationId = "000000000000000000000001";
 const userId = "000000000000000000000002";
@@ -15,7 +16,7 @@ const answers = { formAnswers: { "question-1": "Looks good" } };
 
 const app = express();
 app.use(express.json());
-app.use("/api/public/forms/:formId/submissions/submit", publicSubmit);
+app.use("/api/public", publicRoutes);
 app.use(
   (
     error: { statusCode?: number; code?: string; message?: string },
@@ -41,6 +42,8 @@ beforeEach(async () => {
   await FormSubmission.deleteMany({});
   await FormSubmissionStatus.deleteMany({});
   await Form.deleteMany({});
+  await Organization.deleteMany({});
+  await Organization.create({ _id: organizationId, name: "Alpha", slug: "alpha" });
 });
 
 afterAll(async () => {
@@ -83,6 +86,29 @@ async function createPublicForm(
 }
 
 describe("direct form submissions", () => {
+  it("blocks public reads, links, new submissions, and replays after organization suspension", async () => {
+    const form = await createPublicForm();
+    const url = `/api/public/forms/${form.id}`;
+    const key = randomUUID();
+    await request(app).get(url).expect(200);
+    await request(app)
+      .put(`${url}/submissions/submit`)
+      .set("Idempotency-Key", key)
+      .send(answers)
+      .expect(201);
+    await Organization.updateOne({ _id: organizationId }, { isDisabled: true });
+    await request(app).get(url).expect(404);
+    await request(app).get(`${url}/link?organizationSlug=alpha`).expect(404);
+    for (const idempotencyKey of [key, randomUUID()]) {
+      await request(app)
+        .put(`${url}/submissions/submit`)
+        .set("Idempotency-Key", idempotencyKey)
+        .send(answers)
+        .expect(404);
+    }
+    expect(await FormSubmission.countDocuments({ formId: form.id })).toBe(1);
+  });
+
   it("records a completed public submission without a draft", async () => {
     const form = await createPublicForm();
     const key = randomUUID();

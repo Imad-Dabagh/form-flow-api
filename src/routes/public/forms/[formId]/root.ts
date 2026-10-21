@@ -4,6 +4,7 @@ import { z } from "zod";
 import { validate } from "#app/middlewares/index";
 import FormModule from "#app/modules/form/index";
 import { toSubmissionFormPresentation } from "#app/modules/form/submission-form-presentation";
+import { assertActiveOrganization } from "#app/modules/organization/services/index";
 import { notFound } from "#app/utils/errors";
 
 const router = Router({ mergeParams: true });
@@ -24,9 +25,12 @@ router.get<{ formId: string }>(
           type: "PUBLIC",
           archivedAt: null,
         },
-        selection: "name type description sections displayMode isClosed",
-      })) as Parameters<typeof toSubmissionFormPresentation>[0] | null;
+        selection: "organizationId name type description sections displayMode isClosed",
+      })) as (Parameters<typeof toSubmissionFormPresentation>[0] & {
+        organizationId: mongoose.Types.ObjectId;
+      }) | null;
       if (!form) throw notFound("Form");
+      await assertActiveOrganization(String(form.organizationId));
 
       res.set("Cache-Control", "no-store");
       return res.status(200).json({
