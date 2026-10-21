@@ -182,6 +182,47 @@ describe("organization forms", () => {
     await request(app).get(`/api/orgs/alpha/forms/${archived.id}`).expect(404);
   });
 
+  it("persists normalized section, question, and option values", async () => {
+    const form = await Form.create({ organizationId: alphaId, createdBy: userId, name: "Survey" });
+    const response = await request(app)
+      .put(`/api/orgs/alpha/forms/${form.id}`)
+      .send({
+        description: "Choose an option",
+        sections: [
+          {
+            _id: "  section-1  ",
+            title: "  Feedback  ",
+            questions: [
+              {
+                _id: "question-1",
+                title: "  Your choice  ",
+                inputType: "select",
+                options: [{ label: "  Yes  ", value: "  yes  " }],
+              },
+            ],
+          },
+        ],
+      })
+      .expect(200);
+
+    const expectedSections = [
+      {
+        _id: "section-1",
+        title: "Feedback",
+        questions: [
+          {
+            _id: "question-1",
+            title: "Your choice",
+            options: [{ label: "Yes", value: "yes" }],
+          },
+        ],
+      },
+    ];
+    expect(response.body.data.sections).toMatchObject(expectedSections);
+    const stored = await Form.findById(form.id).lean();
+    expect(stored?.sections).toMatchObject(expectedSections);
+  });
+
   it("validates input and checks permission before schemas", async () => {
     await request(app).post("/api/orgs/alpha/forms").send({ name: " " }).expect(400);
     await request(app)

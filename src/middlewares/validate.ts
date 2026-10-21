@@ -8,9 +8,11 @@ type RequestSchemas = {
   query?: ZodType;
 };
 
-/** Validate request shape before a route handler; handlers keep their existing normalization. */
+/** Validate configured segments and expose their parsed values through the existing request fields. */
 export default function validate(schemas: RequestSchemas): RequestHandler {
   return (req, _res, next) => {
+    const parsed: Partial<Record<keyof RequestSchemas, unknown>> = {};
+
     for (const source of ["params", "body", "query"] as const) {
       const schema = schemas[source];
       if (!schema) continue;
@@ -26,6 +28,19 @@ export default function validate(schemas: RequestSchemas): RequestHandler {
             : issue.message;
         return next(badRequest(message));
       }
+
+      parsed[source] = result.data;
+    }
+
+    // Commit only after every configured segment passes. Express 5's query is
+    // a getter, so define an own property to retain its parsed value downstream.
+    for (const source of Object.keys(parsed) as Array<keyof RequestSchemas>) {
+      Object.defineProperty(req, source, {
+        value: parsed[source],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
 
     return next();
