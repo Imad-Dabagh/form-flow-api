@@ -14,7 +14,7 @@ import uploadRoutes from "#app/routes/upload/index";
 
 export default function expressLoader(app: Express, auth: Auth): void {
   app.disable("x-powered-by");
-  app.set("trust proxy", config.isProduction);
+  app.set("trust proxy", config.trustProxy);
 
   app.use(requestContext);
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
