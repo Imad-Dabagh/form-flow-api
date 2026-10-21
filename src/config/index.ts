@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import "dotenv/config";
 
 function requiredEnv(name: string): string {
@@ -18,6 +19,47 @@ function getPort(): number {
   }
 
   return port;
+}
+
+function getShutdownTimeout(): number {
+  const timeout = Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 30_000);
+
+  if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) {
+    throw new Error("SHUTDOWN_TIMEOUT_MS must be a positive integer within Node's timer range.");
+  }
+
+  return timeout;
+}
+
+function getTrustProxy(): false | number | string[] {
+  const value = process.env.TRUST_PROXY?.trim() || "false";
+  if (value === "false") return false;
+
+  if (/^\d+$/.test(value)) {
+    const hops = Number(value);
+    if (Number.isSafeInteger(hops)) return hops;
+  }
+
+  const proxies = value.split(",").map((proxy) => proxy.trim());
+  const aliases = new Set(["loopback", "linklocal", "uniquelocal"]);
+  const valid = proxies.every((proxy) => {
+    if (aliases.has(proxy)) return true;
+
+    const [address, prefix, ...extra] = proxy.split("/");
+    const family = isIP(address);
+    return (
+      family !== 0 &&
+      extra.length === 0 &&
+      (prefix === undefined ||
+        (/^\d+$/.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128)))
+    );
+  });
+
+  if (!valid) {
+    throw new Error("TRUST_PROXY must be false, a hop count, or a list of proxy IPs/subnets.");
+  }
+
+  return proxies;
 }
 
 function getCorsOrigins(): string[] {
@@ -43,6 +85,8 @@ const config = {
   env,
   isProduction: env === "production",
   port: getPort(),
+  shutdownTimeoutMs: getShutdownTimeout(),
+  trustProxy: getTrustProxy(),
   mongoUri: requiredEnv("MONGO_URI"),
   betterAuthSecret: requiredEnv("BETTER_AUTH_SECRET"),
   betterAuthUrl: requiredEnv("BETTER_AUTH_URL"),
