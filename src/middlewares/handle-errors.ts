@@ -1,6 +1,13 @@
 import type { ErrorRequestHandler } from "express";
 import { AsyncHook, Logger } from "#app/services/index";
-import { AppError, badRequest, conflict, internalError } from "#app/utils/errors";
+import {
+  AppError,
+  badRequest,
+  conflict,
+  internalError,
+  payloadTooLarge,
+  unsupportedMediaType,
+} from "#app/utils/errors";
 
 type MongoLikeError = Error & {
   code?: number;
@@ -8,11 +15,36 @@ type MongoLikeError = Error & {
   path?: string;
   errors?: Record<string, { message?: string }>;
   body?: unknown;
+  type?: string;
 };
 
 function normalizeError(error: MongoLikeError): AppError {
   if (error instanceof AppError) {
-    return error;
+    return Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+      ? error
+      : internalError();
+  }
+
+  // Map known parser failures without exposing request bodies or trusting an
+  // arbitrary error's status/message as a public HTTP response.
+  switch (error.type) {
+    case "entity.too.large":
+      return payloadTooLarge();
+    case "parameters.too.many":
+      return payloadTooLarge("The request contains too many parameters.");
+    case "encoding.unsupported":
+    case "charset.unsupported":
+      return unsupportedMediaType("The request body encoding is not supported.");
+    case "entity.parse.failed":
+      return badRequest(
+        error instanceof SyntaxError ? "Malformed JSON request body." : "Malformed request body.",
+      );
+    case "querystring.parse.rangeError":
+      return badRequest("The request body exceeds the supported nesting depth.");
+    case "request.aborted":
+      return badRequest("The request was aborted.");
+    case "request.size.invalid":
+      return badRequest("The request body size does not match Content-Length.");
   }
 
   if (error.code === 11000) {
@@ -36,7 +68,7 @@ function normalizeError(error: MongoLikeError): AppError {
   return internalError();
 }
 
-const handleErrors: ErrorRequestHandler = (error: MongoLikeError, _req, res, _next) => {
+const handleErrors: ErrorRequestHandler = (error: MongoLikeError, _req, res, next) => {
   const normalized = normalizeError(error);
   const requestId = AsyncHook.getRequestContext()?.requestId;
 
@@ -47,6 +79,10 @@ const handleErrors: ErrorRequestHandler = (error: MongoLikeError, _req, res, _ne
     errorName: error.name,
     errorMessage: error.message,
   });
+
+  if (res.headersSent) {
+    return next(error);
+  }
 
   res.status(normalized.statusCode).json({
     success: false,
