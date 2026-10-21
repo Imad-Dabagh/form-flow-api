@@ -7,6 +7,7 @@ import Form from "../src/modules/form/models/index.js";
 import FormSubmission from "../src/modules/form-submission/models/index.js";
 import FormSubmissionStatus from "../src/modules/form-submission-status/models/index.js";
 import Membership from "../src/modules/membership/models/index.js";
+import Organization from "../src/modules/organization/models/index.js";
 import User from "../src/modules/user/models/index.js";
 import meRoutes from "../src/routes/me/index.js";
 import { storageProvider } from "../src/services/storage/index.js";
@@ -51,8 +52,10 @@ beforeEach(async () => {
     FormSubmission.deleteMany({}),
     FormSubmissionStatus.deleteMany({}),
     Membership.deleteMany({}),
+    Organization.deleteMany({}),
     User.deleteMany({}),
   ]);
+  await Organization.create({ _id: organizationId, name: "Alpha", slug: "alpha" });
   await User.create([
     {
       _id: userId,
@@ -113,6 +116,26 @@ async function getDefaultStatusId(formId: string) {
 }
 
 describe("current user's form submission", () => {
+  it("blocks resume, save, submit, and upload after organization suspension", async () => {
+    const form = await createForm();
+    const path = `/api/me/forms/${form.id}/submission`;
+    await request(app).get(path).set("X-Test-User", userId).expect(200);
+    await Organization.updateOne({ _id: organizationId }, { isDisabled: true });
+    const upload = vi.spyOn(storageProvider, "upload");
+    await request(app).get(path).set("X-Test-User", userId).expect(404);
+    await request(app)
+      .put(path)
+      .set("X-Test-User", userId)
+      .send({ formAnswers: { "question-1": "Denied" } })
+      .expect(404);
+    await request(app).put(`${path}/submit`).set("X-Test-User", userId).expect(404);
+    await request(app).post(`${path}/files/question-1`).set("X-Test-User", userId).expect(404);
+    expect(upload).not.toHaveBeenCalled();
+    const submission = await FormSubmission.findOne({ formId: form.id }).lean();
+    expect(submission?.answers).toEqual({});
+    expect(submission?.submittedAt).toBeNull();
+  });
+
   it("creates one unfinished submission and enrolls its owner when opening an authenticated form", async () => {
     const form = await createForm();
     const path = `/api/me/forms/${form.id}/submission`;

@@ -6,6 +6,7 @@ import {
 import FormModule from "#app/modules/form/index";
 import FormSubmissionStatusModule from "#app/modules/form-submission-status/index";
 import FormSubmissionModule from "#app/modules/form-submission/index";
+import { assertActiveOrganization } from "#app/modules/organization/services/index";
 import {
   validateFormAnswers,
   type SubmissionSection,
@@ -40,6 +41,7 @@ export async function findForm(formId: string) {
     selection: "organizationId name type description sections displayMode isClosed",
   })) as SubmissionForm | null;
   if (!form) throw notFound("Form");
+  await assertActiveOrganization(String(form.organizationId));
   return form;
 }
 
