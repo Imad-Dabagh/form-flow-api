@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "dev": "nodemon --watch src --ext ts --exec \"node --conditions=development --import tsx\" src/index.ts",
+    "dev": "nodemon --signal SIGTERM --watch src --ext ts --exec \"node --conditions=development --import tsx\" src/index.ts",
     "build": "tsc",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
