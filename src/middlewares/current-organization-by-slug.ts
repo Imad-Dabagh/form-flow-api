@@ -11,6 +11,7 @@ type OrganizationRecord = {
 
 export async function resolveOrganizationBySlug(
   rawSlug: unknown,
+  { allowDisabled = false }: { allowDisabled?: boolean } = {},
 ): Promise<OrganizationRequestContext> {
   const slug = typeof rawSlug === "string" ? rawSlug.trim().toLowerCase() : undefined;
 
@@ -19,7 +20,7 @@ export async function resolveOrganizationBySlug(
   }
 
   const organization = (await OrganizationModule.services.fetchOne({
-    query: { slug, archivedAt: null },
+    query: { slug, archivedAt: null, ...(allowDisabled ? {} : { isDisabled: false }) },
     selection: ["_id", "slug"],
   })) as OrganizationRecord | null;
 
@@ -35,7 +36,10 @@ export async function resolveOrganizationBySlug(
 
 const currentOrganizationBySlug: RequestHandler = async (req, _res, next) => {
   try {
-    req.organization = await resolveOrganizationBySlug(req.params.organizationSlug);
+    // Only verified platform administrators retain management access during suspension.
+    req.organization = await resolveOrganizationBySlug(req.params.organizationSlug, {
+      allowDisabled: req.auth?.isSuperAdmin === true,
+    });
 
     AsyncHook.updateRequestContext({
       currentOrganizationId: req.organization.organizationId,

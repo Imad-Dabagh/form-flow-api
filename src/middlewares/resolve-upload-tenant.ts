@@ -17,7 +17,9 @@ const resolveUploadTenant: RequestHandler = async (req, _res, next) => {
       return next();
     }
 
-    req.organization = await resolveOrganizationBySlug(organizationSlug);
+    req.organization = await resolveOrganizationBySlug(organizationSlug, {
+      allowDisabled: req.auth.isSuperAdmin,
+    });
     req.organizationAccess = await resolveOrganizationAccess(req.auth, req.organization);
     req.uploadTenantId = `organization-${req.organization.organizationId}`;
 
